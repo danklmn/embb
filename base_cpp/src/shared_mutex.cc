@@ -24,37 +24,50 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef EMBB_BASE_C_BASE_H_
-#define EMBB_BASE_C_BASE_H_
-
-/**
- * \defgroup C C Components
- * Components written in C.
- */
-
-/**
- * \defgroup C_BASE Base
- * \ingroup C
- * Platform-independent abstraction layer for multithreading and basic
- * operations.
- *
- * This component provides basic functionalities, mainly for creating and
- * synchronizing threads. Most of the functions are essentially wrappers for
- * functions specific to the underlying operating system.
- */
-
-#include <embb/base/c/atomic.h>
-#include <embb/base/c/condition_variable.h>
-#include <embb/base/c/core_set.h>
-#include <embb/base/c/counter.h>
-#include <embb/base/c/duration.h>
-#include <embb/base/c/errors.h>
-#include <embb/base/c/log.h>
-#include <embb/base/c/memory_allocation.h>
-#include <embb/base/c/mutex.h>
-#include <embb/base/c/thread.h>
-#include <embb/base/c/thread_specific_storage.h>
-#include <embb/base/c/time.h>
+#include <embb/base/shared_mutex.h>
 #include <embb/base/c/shared_mutex.h>
 
-#endif /* EMBB_BASE_C_BASE_H_ */
+namespace embb {
+namespace base {
+
+SharedMutex::SharedMutex()
+    : shared_mutex_() {
+  embb_shared_mutex_init(&shared_mutex_);
+}
+
+SharedMutex::~SharedMutex() {
+  embb_shared_mutex_destroy(&shared_mutex_);
+}
+
+void SharedMutex::Lock() {
+  embb_shared_mutex_lock(&shared_mutex_);
+}
+
+bool SharedMutex::TryLock() {
+  int result = embb_shared_mutex_try_lock(&shared_mutex_);
+  return result == EMBB_SUCCESS;
+}
+
+void SharedMutex::Unlock() {
+  embb_shared_mutex_unlock(&shared_mutex_);
+}
+
+void SharedMutex::LockShared() {
+  embb_shared_mutex_lock_shared(&shared_mutex_);
+}
+
+bool SharedMutex::TryLockShared() {
+  int result = embb_shared_mutex_try_lock_shared(&shared_mutex_);
+  return result == EMBB_SUCCESS;
+}
+
+void SharedMutex::UnlockShared() {
+  embb_shared_mutex_unlock_shared(&shared_mutex_);
+}
+
+} // namespace base
+} // namespace embb
+
+
+
+
