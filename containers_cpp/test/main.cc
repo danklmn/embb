@@ -33,6 +33,9 @@
 #include <embb/containers/lock_free_chromatic_tree.h>
 #include <embb/base/c/memory_allocation.h>
 
+#include <embb/containers/fgl_chromatic_tree.h>
+#include <embb/containers/cgl_chromatic_tree.h>
+
 #include <partest/partest.h>
 #include <embb/base/thread.h>
 
@@ -53,6 +56,8 @@ using embb::containers::LockFreeStack;
 using embb::containers::LockFreeTreeValuePool;
 using embb::containers::WaitFreeArrayValuePool;
 using embb::containers::ChromaticTree;
+using embb::containers::FGLChromaticTree;
+using embb::containers::CGLChromaticTree;
 using embb::containers::test::PoolTest;
 using embb::containers::test::HazardPointerTest;
 using embb::containers::test::QueueTest;
@@ -65,16 +70,18 @@ PT_MAIN("Data Structures C++") {
     2 * partest::TestSuite::GetDefaultNumThreads());
   embb_thread_set_max_count(max_threads);
 
-  PT_RUN(PoolTest< WaitFreeArrayValuePool<int COMMA -1> >);
-  PT_RUN(PoolTest< LockFreeTreeValuePool<int COMMA -1> >);
-  PT_RUN(HazardPointerTest);
-  PT_RUN(QueueTest< WaitFreeSPSCQueue< ::std::pair<size_t COMMA int> > >);
-  PT_RUN(QueueTest< LockFreeMPMCQueue< ::std::pair<size_t COMMA int> >
-    COMMA true COMMA true >);
-  PT_RUN(StackTest< LockFreeStack<int> >);
-  PT_RUN(ObjectPoolTest< LockFreeTreeValuePool<bool COMMA false > >);
-  PT_RUN(ObjectPoolTest< WaitFreeArrayValuePool<bool COMMA false> >);
+//  PT_RUN(PoolTest< WaitFreeArrayValuePool<int COMMA -1> >);
+//  PT_RUN(PoolTest< LockFreeTreeValuePool<int COMMA -1> >);
+//  PT_RUN(HazardPointerTest);
+//  PT_RUN(QueueTest< WaitFreeSPSCQueue< ::std::pair<size_t COMMA int> > >);
+//  PT_RUN(QueueTest< LockFreeMPMCQueue< ::std::pair<size_t COMMA int> >
+//    COMMA true COMMA true >);
+//  PT_RUN(StackTest< LockFreeStack<int> >);
+//  PT_RUN(ObjectPoolTest< LockFreeTreeValuePool<bool COMMA false > >);
+//  PT_RUN(ObjectPoolTest< WaitFreeArrayValuePool<bool COMMA false> >);
   PT_RUN(TreeTest< ChromaticTree<size_t COMMA int> >);
+  PT_RUN(TreeTest< FGLChromaticTree<size_t COMMA int> >);
+  PT_RUN(TreeTest< CGLChromaticTree<size_t COMMA int> >);
 
   PT_EXPECT(embb_get_bytes_allocated() == 0);
 }

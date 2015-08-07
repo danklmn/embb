@@ -189,6 +189,8 @@ else()
 endif()
 message("   (set with command line option -DBUILD_EXAMPLES=ON/OFF)")
 
+add_subdirectory(perf)
+
 ## INSTALLATION
 #
 include(CMakeCommon/SetInstallPaths.cmake)

@@ -522,6 +522,7 @@ ChromaticTree(size_t capacity, Key undefined_key, Value undefined_value,
                                  Operation::INITIAL_DUMMY)) {
   assert(entry_ != NULL);
   assert(entry_->GetLeft() != NULL);
+  reg_ = NULL;
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
@@ -534,6 +535,7 @@ ChromaticTree<Key, Value, Compare, ValuePool>::
 template<typename Key, typename Value, typename Compare, typename ValuePool>
 bool ChromaticTree<Key, Value, Compare, ValuePool>::
 Get(const Key& key, Value& value) {
+  if (reg_) reg_->StartOperation(embb::perf::TreeOpRegister::OP_GET);
   HazardNodePtr grandparent(GetNodeGuard(HIDX_GRANDPARENT));
   HazardNodePtr parent(GetNodeGuard(HIDX_PARENT));
   HazardNodePtr leaf(GetNodeGuard(HIDX_LEAF));
@@ -547,6 +549,7 @@ Get(const Key& key, Value& value) {
     value = leaf->GetValue();
   }
 
+  if (reg_) reg_->EndOperation();
   return keys_are_equal;
 }
 
@@ -560,6 +563,7 @@ TryInsert(const Key& key, const Value& value) {
 template<typename Key, typename Value, typename Compare, typename ValuePool>
 bool ChromaticTree<Key, Value, Compare, ValuePool>::
 TryInsert(const Key& key, const Value& value, Value& old_value) {
+  if (reg_) reg_->StartOperation(embb::perf::TreeOpRegister::OP_INSERT);
   Node* new_leaf = NULL;
   Node* new_sibling = NULL;
   Node* new_parent = NULL;
@@ -567,6 +571,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
   bool added_violation = false;
 
   while (!insertion_succeeded) {
+    if (reg_) reg_->Attempt();
     HazardNodePtr grandparent(GetNodeGuard(HIDX_GRANDPARENT));
     HazardNodePtr parent(GetNodeGuard(HIDX_PARENT));
     HazardNodePtr leaf(GetNodeGuard(HIDX_LEAF));
@@ -591,6 +596,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
       new_parent = node_pool_.Allocate(key, value, leaf->GetWeight(),
                                        Operation::INITIAL_DUMMY);
       if (new_parent == NULL) break;
+      if (reg_) reg_->ShortPathTaken(true);
 
     // Reached leaf has a different key: add a new leaf
     } else {
@@ -614,6 +620,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
                                          Operation::INITIAL_DUMMY);
       }
       if (new_parent == NULL) break;
+      if (reg_) reg_->ShortPathTaken(false);
     }
 
     // Create and fill the operation object
@@ -640,6 +647,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
         FreeNode(new_sibling); new_sibling = NULL;
       }
       // Restart from scratch
+      if (reg_) reg_->Conflict();
       continue;
     }
 
@@ -661,6 +669,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
     if (new_parent != NULL)  FreeNode(new_parent);
   }
 
+  if (reg_) reg_->EndOperation();
   return insertion_succeeded;
 }
 
@@ -674,11 +683,13 @@ TryDelete(const Key& key) {
 template<typename Key, typename Value, typename Compare, typename ValuePool>
 bool ChromaticTree<Key, Value, Compare, ValuePool>::
 TryDelete(const Key& key, Value& old_value) {
+  if (reg_) reg_->StartOperation(embb::perf::TreeOpRegister::OP_DELETE);
   Node* new_leaf = NULL;
   bool deletion_succeeded = false;
   bool added_violation = false;
 
   while (!deletion_succeeded) {
+    if (reg_) reg_->Attempt();
     HazardNodePtr grandparent(GetNodeGuard(HIDX_GRANDPARENT));
     HazardNodePtr parent(GetNodeGuard(HIDX_PARENT));
     HazardNodePtr leaf(GetNodeGuard(HIDX_LEAF));
@@ -689,6 +700,7 @@ TryDelete(const Key& key, Value& old_value) {
                              compare_(leaf->GetKey(), key))) {
       old_value = undefined_value_;
       deletion_succeeded = true;
+      if (reg_) reg_->ShortPathTaken(true);
       break;
     }
 
@@ -750,6 +762,7 @@ TryDelete(const Key& key, Value& old_value) {
       // Delete new nodes
       FreeNode(new_leaf);
       // Restart from scratch
+      if (reg_) reg_->Conflict();
       continue;
     }
 
@@ -772,6 +785,7 @@ TryDelete(const Key& key, Value& old_value) {
     if (new_leaf != NULL)    FreeNode(new_leaf);
   }
 
+  if (reg_) reg_->EndOperation();
   return deletion_succeeded;
 }
 
@@ -823,6 +837,7 @@ Search(const Key& key, HazardNodePtr& leaf, HazardNodePtr& parent,
           op->HelpCommit(GetNodeGuard(HIDX_HELPING));
         }
         // Can't follow a child pointer in a retired node - restart from root
+        if (reg_) reg_->SearchConflict();
         break;
       }
 
@@ -980,6 +995,7 @@ FreeOperation(Operation* operation) {
 template<typename Key, typename Value, typename Compare, typename ValuePool>
 bool ChromaticTree<Key, Value, Compare, ValuePool>::
 CleanUp(const Key& key) {
+  if (reg_) reg_->CleanupStart();
   HazardNodePtr grandgrandparent(GetNodeGuard(HIDX_GRANDGRANDPARENT));
   HazardNodePtr grandparent(GetNodeGuard(HIDX_GRANDPARENT));
   HazardNodePtr parent(GetNodeGuard(HIDX_PARENT));
@@ -987,6 +1003,7 @@ CleanUp(const Key& key) {
   bool reached_leaf = false;
 
   while (!reached_leaf) {
+    if (reg_) reg_->CleanupAttempt();
     bool found_violation = false;
 
     grandgrandparent.ProtectSafe(entry_);
@@ -1022,11 +1039,13 @@ CleanUp(const Key& key) {
       // Check for violations
       if ((leaf->GetWeight() > 1) || (leaf->GetWeight() == 0 &&
                                       parent->GetWeight() == 0)) {
-        if (Rebalance(grandgrandparent, grandparent, parent, leaf) ==
-            EMBB_NOMEM) {
+        embb_errors_t error = Rebalance(grandgrandparent, grandparent,
+                                        parent, leaf);
+        if (error == EMBB_NOMEM) {
           assert(false && "No memory for rebalancing!");
           return false;
         }
+        if (reg_ && error == EMBB_BUSY) reg_->CleanupConflict();
         break;
       }
 
@@ -1034,6 +1053,7 @@ CleanUp(const Key& key) {
     }
   }
 
+  if (reg_) reg_->CleanupEnd();
   return true;
 }
 
