@@ -46,16 +46,16 @@ class TreeOpRegister {
     OP_DELETE
   } OpType;
 
-  TreeOpRegister(int threads, int records)
+  TreeOpRegister(unsigned int threads, unsigned int records)
       : num_threads_(threads),
         num_records_(records),
         counters_(num_threads_),
         records_(num_threads_ * num_records_) {}
 
   void DumpToStream(std::ostream& out) {
-    for (int thread = 0; thread < num_threads_; ++thread) {
+    for (size_t thread = 0; thread < num_threads_; ++thread) {
       out << "# Thread number: " << thread << "\n";
-      for (int rec_number = 0; rec_number < num_records_; ++rec_number) {
+      for (size_t rec_number = 0; rec_number < num_records_; ++rec_number) {
         Record& record = GetRecord(thread, rec_number);
         out << record.op_type_ << ", "
             << record.full_time_ << ", "
@@ -113,7 +113,12 @@ class TreeOpRegister {
   }
 
  private:
-  typedef struct {
+  struct Record {
+    Record()
+        : op_type_(OP_GET), full_time_(0), attempts_(0), conflicts_(0),
+          cleanup_time_(0), cleanup_attempts_(0), cleanup_conflicts_(0),
+          search_conflicts_(0), short_path_(false) {}
+
     OpType  op_type_;
     int64_t full_time_;
     int     attempts_;
@@ -123,7 +128,7 @@ class TreeOpRegister {
     int     cleanup_conflicts_;
     int     search_conflicts_;
     bool    short_path_;
-  } Record;
+  };
   typedef std::vector<int>    CounterVec;
   typedef std::vector<Record> RecordVec;
 
@@ -132,11 +137,11 @@ class TreeOpRegister {
     return GetRecord(thread, GetCounter(thread));
   }
 
-  int& GetCounter(int thread) {
+  unsigned int& GetCounter(unsigned int thread) {
     return counters_[thread];
   }
 
-  Record& GetRecord(int thread, int rec_number) {
+  Record& GetRecord(unsigned int thread, unsigned int rec_number) {
     return records_[thread * num_records_ + rec_number];
   }
 
@@ -147,9 +152,9 @@ class TreeOpRegister {
     return thread;
   }
 
-  int                 num_threads_;
-  int                 num_records_;
-  std::vector<int>    counters_;
+  unsigned int num_threads_;
+  unsigned int num_records_;
+  std::vector<unsigned int> counters_;
   std::vector<Record> records_;
 };
 

@@ -36,6 +36,7 @@
 #if defined EMBB_PLATFORM_COMPILER_GNUC
 #include <time.h>
 #elif defined EMBB_PLATFORM_COMPILER_MSVC
+#define NOMINMAX
 #include <Windows.h>
 #else
 #error "Unknown compiler"

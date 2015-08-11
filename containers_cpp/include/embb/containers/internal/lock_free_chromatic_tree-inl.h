@@ -143,13 +143,16 @@ ChromaticTreeOperation<Key, Value>::ChromaticTreeOperation()
       root_(NULL),
       root_operation_(NULL),
       num_old_nodes_(0),
-      old_nodes_(),
-      old_operations_(),
       new_child_(NULL)
 #ifdef EMBB_DEBUG
       , deleted_(false)
 #endif
-{}
+{
+  for (size_t i = 0; i < MAX_NODES; ++i) {
+    old_nodes_[i] = NULL;
+    old_operations_[i] = NULL;
+  }
+}
 
 template<typename Key, typename Value>
 void ChromaticTreeOperation<Key, Value>::
@@ -341,7 +344,14 @@ void ChromaticTreeOperation<Key, Value>::SetDeleted() {
 template<typename Key, typename Value>
 typename ChromaticTreeOperation<Key, Value>::Operation*
 ChromaticTreeOperation<Key, Value>::GetInitialDummmy() {
+#ifdef EMBB_PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable:4640)
+#endif
   static ChromaticTreeOperation initial_dummy;
+#ifdef EMBB_PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
   initial_dummy.state_ = STATE_COMMITTED;
 
@@ -351,7 +361,14 @@ ChromaticTreeOperation<Key, Value>::GetInitialDummmy() {
 template<typename Key, typename Value>
 typename ChromaticTreeOperation<Key, Value>::Operation*
 ChromaticTreeOperation<Key, Value>::GetRetiredDummmy() {
+#ifdef EMBB_PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable:4640)
+#endif
   static ChromaticTreeOperation retired_dummy;
+#ifdef EMBB_PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
   retired_dummy.state_ = STATE_COMMITTED;
 
@@ -777,6 +794,7 @@ TryDelete(const Key& key, Value& old_value) {
     RetireNode(sibling);
 
     added_violation =  (new_weight > 1);
+    if (reg_) reg_->ShortPathTaken(false);
   }
 
   if (deletion_succeeded) {

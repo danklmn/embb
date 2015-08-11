@@ -37,9 +37,9 @@ embb_errors_t BLK(Node*& u,
           Node*& uxl,
           Node*& uxr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxl = node_pool_.Allocate(
@@ -77,9 +77,9 @@ embb_errors_t PUSH_L(Node*& u,
              Node*& uxl,
              Node*& uxr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxl = node_pool_.Allocate(
@@ -117,9 +117,9 @@ embb_errors_t PUSH_R(Node*& u,
              Node*& uxl,
              Node*& uxr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxr;
-  Node* nxl;
-  Node* nx;
+  Node* nxr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxr = node_pool_.Allocate(
@@ -156,8 +156,8 @@ embb_errors_t RB1_L(Node*& u,
             Node*& ux,
             Node*& uxl) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxr;
-  Node* nx;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxr = node_pool_.Allocate(
@@ -188,8 +188,8 @@ embb_errors_t RB1_R(Node*& u,
             Node*& ux,
             Node*& uxr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxl;
-  Node* nx;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxl = node_pool_.Allocate(
@@ -221,9 +221,9 @@ embb_errors_t RB2_L(Node*& u,
             Node*& uxl,
             Node*& uxlr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxl = node_pool_.Allocate(
@@ -261,9 +261,9 @@ embb_errors_t RB2_R(Node*& u,
             Node*& uxr,
             Node*& uxrl) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxr;
-  Node* nxl;
-  Node* nx;
+  Node* nxr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxr = node_pool_.Allocate(
@@ -302,10 +302,10 @@ embb_errors_t W1_L(Node*& u,
            Node*& uxr,
            Node*& uxrl) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxll;
-  Node* nxlr;
-  Node* nxl;
-  Node* nx;
+  Node* nxll = NULL;
+  Node* nxlr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxll = node_pool_.Allocate(
@@ -350,10 +350,10 @@ embb_errors_t W1_R(Node*& u,
            Node*& uxr,
            Node*& uxlr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxrr;
-  Node* nxrl;
-  Node* nxr;
-  Node* nx;
+  Node* nxrr = NULL;
+  Node* nxrl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxrr = node_pool_.Allocate(
@@ -398,10 +398,10 @@ embb_errors_t W2_L(Node*& u,
            Node*& uxr,
            Node*& uxrl) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxll;
-  Node* nxlr;
-  Node* nxl;
-  Node* nx;
+  Node* nxll = NULL;
+  Node* nxlr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxll = node_pool_.Allocate(
@@ -446,10 +446,10 @@ embb_errors_t W2_R(Node*& u,
            Node*& uxr,
            Node*& uxlr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxrr;
-  Node* nxrl;
-  Node* nxr;
-  Node* nx;
+  Node* nxrr = NULL;
+  Node* nxrl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxrr = node_pool_.Allocate(
@@ -495,11 +495,11 @@ embb_errors_t W3_L(Node*& u,
            Node*& uxrl,
            Node*& uxrll) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxlll;
-  Node* nxll;
-  Node* nxlr;
-  Node* nxl;
-  Node* nx;
+  Node* nxlll = NULL;
+  Node* nxll = NULL;
+  Node* nxlr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxlll = node_pool_.Allocate(
@@ -551,11 +551,11 @@ embb_errors_t W3_R(Node*& u,
            Node*& uxlr,
            Node*& uxlrr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxrrr;
-  Node* nxrr;
-  Node* nxrl;
-  Node* nxr;
-  Node* nx;
+  Node* nxrrr = NULL;
+  Node* nxrr = NULL;
+  Node* nxrl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxrrr = node_pool_.Allocate(
@@ -607,11 +607,11 @@ embb_errors_t W4_L(Node*& u,
            Node*& uxrl,
            Node*& uxrlr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxll;
-  Node* nxrl;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxll = NULL;
+  Node* nxrl = NULL;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxll = node_pool_.Allocate(
@@ -663,11 +663,11 @@ embb_errors_t W4_R(Node*& u,
            Node*& uxlr,
            Node*& uxlrl) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxrr;
-  Node* nxlr;
-  Node* nxr;
-  Node* nxl;
-  Node* nx;
+  Node* nxrr = NULL;
+  Node* nxlr = NULL;
+  Node* nxr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxrr = node_pool_.Allocate(
@@ -718,10 +718,10 @@ embb_errors_t W5_L(Node*& u,
            Node*& uxr,
            Node*& uxrr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxll;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxll = NULL;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxll = node_pool_.Allocate(
@@ -766,10 +766,10 @@ embb_errors_t W5_R(Node*& u,
            Node*& uxr,
            Node*& uxll) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxrr;
-  Node* nxr;
-  Node* nxl;
-  Node* nx;
+  Node* nxrr = NULL;
+  Node* nxr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxrr = node_pool_.Allocate(
@@ -814,10 +814,10 @@ embb_errors_t W6_L(Node*& u,
            Node*& uxr,
            Node*& uxrl) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxll;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxll = NULL;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxll = node_pool_.Allocate(
@@ -862,10 +862,10 @@ embb_errors_t W6_R(Node*& u,
            Node*& uxr,
            Node*& uxlr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxrr;
-  Node* nxr;
-  Node* nxl;
-  Node* nx;
+  Node* nxrr = NULL;
+  Node* nxr = NULL;
+  Node* nxl = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxrr = node_pool_.Allocate(
@@ -909,9 +909,9 @@ embb_errors_t W7(Node*& u,
          Node*& uxl,
          Node*& uxr) {
   embb_errors_t result = EMBB_NOMEM;
-  Node* nxl;
-  Node* nxr;
-  Node* nx;
+  Node* nxl = NULL;
+  Node* nxr = NULL;
+  Node* nx = NULL;
 
   while (result != EMBB_SUCCESS) {
     nxl = node_pool_.Allocate(

@@ -32,19 +32,34 @@
 #include <embb/perf/register.h>
 #include <embb/perf/benchmark.h>
 
+#include <embb/containers/lock_free_chromatic_tree.h>
+#include <embb/containers/fgl_chromatic_tree.h>
+#include <embb/containers/cgl_chromatic_tree.h>
+
+typedef embb::containers::ChromaticTree<int, int>    LockFreeTree;
+typedef embb::containers::FGLChromaticTree<int, int> FGLTree;
+typedef embb::containers::CGLChromaticTree<int, int> CGLTree;
+
 void Usage(char* prog_name) {
-  std::cerr << "USAGE: " << prog_name << " [-T] [-L]" << " [-t<num_threads>]"
-      << " [-s<tree_size>]" << " [-n<num_operations>]"
-      << " [-o<output_file>]" << std::endl;
+  std::cerr << "USAGE: " << prog_name << " [-T] [-L]" << " [-F | -C]"
+      << " [-t<num_threads>]" << " [-s<tree_size>]" << " [-n<num_operations>]"
+      << " [-o<output_file>]" << " [-i<insert_rate>]" << " [-d<delete_rate>]"
+      << " [-p<prefill_level>]" << " [-a]" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
   bool run_latency_test = false;
   bool run_throughput_test = false;
-  int num_threads = 1;
-  int tree_size = 1000;
-  int num_operations = 10;
+  bool use_fgl_tree = false;
+  bool use_cgl_tree = false;
+  unsigned int num_threads = 1;
+  unsigned int tree_size = 1000;
+  unsigned int num_operations = 10;
   std::ofstream dump_stream;
+  double insert_rate = 0.25;
+  double delete_rate = 0.25;
+  double prefill_level = 0.5;
+  bool offset_affinity = false;
 
   for (int i = 1; i < argc; ++i) {
     char opt = 0;
@@ -56,23 +71,44 @@ int main(int argc, char* argv[]) {
     }
     
     switch (opt) {
+    case 'N':
+      // Selects the lock-free implementation
+      break;
     case 'L':
       run_latency_test = true;
       break;
     case 'T':
       run_throughput_test = true;
       break;
+    case 'F':
+      use_fgl_tree = true;
+      break;
+    case 'C':
+      use_cgl_tree = true;
+      break;
     case 't':
-      num_threads = atoi(arg);
+      num_threads = static_cast<unsigned int>(atoi(arg));
       break;
     case 's':
-      tree_size = atoi(arg);
+      tree_size = static_cast<unsigned int>(atoi(arg));
       break;
     case 'n':
-      num_operations = atoi(arg);
+      num_operations = static_cast<unsigned int>(atoi(arg));
       break;
     case 'o':
       dump_stream.open(arg, std::ios_base::trunc);
+      break;
+    case 'i':
+      insert_rate = atof(arg);
+      break;
+    case 'd':
+      delete_rate = atof(arg);
+      break;
+    case 'p':
+      prefill_level = atof(arg);
+      break;
+    case 'a':
+      offset_affinity = true;
       break;
     default:
       Usage(argv[0]);
@@ -85,20 +121,51 @@ int main(int argc, char* argv[]) {
   }
 
 
-  embb::perf::TreeBenchmark benchmark(tree_size);
+  embb::perf::TreeBenchmark *benchmark = NULL;
+  if (use_fgl_tree) {
+    benchmark = new embb::perf::TreeBenchmarkImpl<FGLTree>(tree_size,
+        insert_rate, delete_rate, prefill_level, offset_affinity);
+    std::cout << "Tree type:             Fine-grained Locking\n";
+  } else if (use_cgl_tree) {
+    benchmark = new embb::perf::TreeBenchmarkImpl<CGLTree>(tree_size,
+        insert_rate, delete_rate, prefill_level, offset_affinity);
+    std::cout << "Tree type:             Coarse-grained Locking\n";
+  } else {
+    benchmark = new embb::perf::TreeBenchmarkImpl<LockFreeTree>(tree_size,
+        insert_rate, delete_rate, prefill_level, offset_affinity);
+    std::cout << "Tree type:             Lock-free\n";
+  }
+
+  std::cout << "Number of threads:     " << num_threads << "\n";
+  std::cout << "Operations per thread: " << num_operations << "\n";
+  std::cout << "Affinity offset:       "
+      << (offset_affinity ? "yes" : "no") << "\n";
+  std::cout << "Insertion rate:        "
+      << static_cast<int>(insert_rate * 100) << "\n";
+  std::cout << "Deletion rate:         "
+      << static_cast<int>(delete_rate * 100) << "\n";
+  std::cout << std::flush;
+
+  unsigned int final_population = 0;
 
   if (run_latency_test) {
     embb::perf::TreeOpRegister op_register(num_threads, num_operations);
-    benchmark.RunLatencyTest(num_threads, num_operations, op_register);
+    benchmark->RunLatencyTest(num_threads, num_operations, op_register,
+                                           final_population);
     op_register.DumpToStream(dump_stream.is_open() ? dump_stream : std::cout);
-
   }
 
   if (run_throughput_test) {
     double throughput;
-    benchmark.RunThroughputTest(num_threads, num_operations, throughput);
-    std::cout << "Throughput: " << throughput << "\n";
+    benchmark->RunThroughputTest(num_threads, num_operations, throughput,
+                                 final_population);
+    std::cout << "Throughput: " << throughput << " ops/sec\n";
   }
+
+  std::cout << "Final population: "
+      << static_cast<double>(final_population * 100) / tree_size << "%\n";
+
+  delete benchmark;
   
   return 0;
 }

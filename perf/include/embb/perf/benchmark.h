@@ -27,7 +27,13 @@
 #ifndef EMBB_PERF_BENCHMARK_H_
 #define	EMBB_PERF_BENCHMARK_H_
 
-#include <embb/containers/lock_free_chromatic_tree.h>
+#include <time.h>
+#include <random>
+
+#include <embb/base/atomic.h>
+#include <embb/base/function.h>
+#include <embb/base/thread.h>
+#include <embb/base/core_set.h>
 
 #include <embb/perf/timer.h>
 #include <embb/perf/register.h>
@@ -37,18 +43,92 @@ namespace perf {
 
 class TreeBenchmark {
  public:
-  TreeBenchmark(int tree_size, double insert_rate = 0.25,
-                double delete_rate = 0.25, double prefill_level = 0.5)
+  TreeBenchmark(unsigned int tree_size, double insert_rate = 0.25,
+                double delete_rate = 0.25, double prefill_level = 0.5,
+                bool offset_affinity = false)
       : tree_size_(tree_size), insert_rate_(insert_rate),
         delete_rate_(delete_rate), prefill_level_(prefill_level),
-        tree_(NULL), num_operations_(0), runners_(),
-        sync_barrier_(false), active_threads_(0) {
-    srand(time(NULL));
+        operations_per_thread_(0), runners_(),
+        sync_barrier_(false), active_threads_(0),
+        offset_affinity_(offset_affinity) {
+    srand(static_cast<unsigned int>(time(NULL)));
   }
 
-  void RunLatencyTest(int threads, int operations, TreeOpRegister& reg) {
+  virtual void RunLatencyTest(unsigned int threads, unsigned int operations,
+                              TreeOpRegister& reg,
+                              unsigned int& population) = 0;
+
+  virtual void RunThroughputTest(unsigned int threads, unsigned int operations,
+                                 double& throughput,
+                                 unsigned int& population) = 0;
+
+  virtual ~TreeBenchmark() {};
+  
+ protected:
+  void InitializeRunners(unsigned int threads) {
+    num_threads_ = threads;
+
+    active_threads_ = 0;
+    sync_barrier_ = true;
+
+    for (size_t i = 0; i < num_threads_; ++i) {
+      embb::base::CoreSet core_set(false);
+      core_set.Add(i * (offset_affinity_ ? 2 : 1));
+      runners_.push_back(new embb::base::Thread(core_set,
+          embb::base::MakeFunction(*this, &TreeBenchmark::GenerateLoad)));
+    }
+
+    while (active_threads_ < static_cast<int>(num_threads_))
+      embb::base::Thread::CurrentYield();
+  }
+
+  void StartRunners() {
+    sync_barrier_ = false;
+  }
+
+  void WaitForRunners() {
+    for (size_t i = 0; i < num_threads_; ++i) {
+      runners_[i]->Join();
+      delete runners_[i];
+    }
+
+    runners_.clear();
+    num_threads_ = 0;
+  }
+
+  virtual void GenerateLoad() = 0;
+
+  TreeBenchmark(const TreeBenchmark&);
+  TreeBenchmark& operator=(const TreeBenchmark&);
+
+  const unsigned int tree_size_;
+  const double insert_rate_;
+  const double delete_rate_;
+  const double prefill_level_;
+  unsigned int num_threads_;
+  unsigned int operations_per_thread_;
+  std::vector<embb::base::Thread*> runners_;
+  embb::base::Atomic<bool> sync_barrier_;
+  embb::base::Atomic<int> active_threads_;
+  bool offset_affinity_;
+};
+
+template<typename Tree>
+class TreeBenchmarkImpl : public TreeBenchmark {
+ public:
+  TreeBenchmarkImpl(unsigned int tree_size, double insert_rate = 0.25,
+                double delete_rate = 0.25, double prefill_level = 0.5,
+                bool offset_affinity = false)
+      : TreeBenchmark(tree_size, insert_rate, delete_rate, prefill_level,
+                      offset_affinity),
+        tree_(NULL) {
+    srand(static_cast<unsigned int>(time(NULL)));
+  }
+
+  void RunLatencyTest(unsigned int threads, unsigned int operations,
+                      TreeOpRegister& reg, unsigned int& population) {
     tree_ = new Tree(tree_size_);
-    num_operations_ = operations;
+    operations_per_thread_ = operations;
 
     InitializeRunners(threads);
     
@@ -58,12 +138,16 @@ class TreeBenchmark {
 
     WaitForRunners();
 
+    tree_->reg_ = NULL;
+    population = TreePopulation();
+
     delete tree_;
   }
 
-  void RunThroughputTest(int threads, int operations, double& throughput) {
+  void RunThroughputTest(unsigned int threads, unsigned int operations,
+                         double& throughput, unsigned int& population) {
     tree_ = new Tree(tree_size_);
-    num_operations_ = operations;
+    operations_per_thread_ = operations;
 
     InitializeRunners(threads);
 
@@ -77,43 +161,25 @@ class TreeBenchmark {
     
     throughput = threads * operations / duration;
 
+    population = TreePopulation();
+    
     delete tree_;
   }
-  
+
+  ~TreeBenchmarkImpl() {}
+
  private:
-  typedef embb::containers::ChromaticTree<int, int> Tree;
-
-  void InitializeRunners(int threads) {
-    num_threads_ = threads;
-
-    active_threads_ = 0;
-    sync_barrier_ = true;
-
-    for (int i = 0; i < num_threads_; ++i) {
-      runners_.push_back(new embb::base::Thread(
-          embb::base::MakeFunction(*this, GenerateLoad)));
-    }
-
-    while (active_threads_ < num_threads_) embb::base::Thread::CurrentYield();
-  }
-
-  void StartRunners() {
-    sync_barrier_ = false;
-  }
-
-  void WaitForRunners() {
-    for (int i = 0; i < num_threads_; ++i) {
-      runners_[i]->Join();
-      delete runners_[i];
-    }
-
-    runners_.clear();
-    num_threads_ = 0;
-  }
-
   void GenerateLoad() {
-    for (int i = tree_size_ * prefill_level_ / num_threads_; i > 0; --i) {
-      int key = rand() % tree_size_;
+    std::random_device rd;
+    std::mt19937 key_gen(rd());
+    std::mt19937 op_gen(rd());
+    std::uniform_int_distribution<> key_dist(0, static_cast<int>(tree_size_));
+    std::uniform_real_distribution<> op_dist;
+
+    size_t num_prefill = static_cast<size_t>(tree_size_ * prefill_level_);
+    for (size_t i = 0; i < num_prefill / num_threads_; ++i) {
+//      int key = rand() % static_cast<int>(tree_size_);
+      int key = key_dist(key_gen);
       tree_->TryInsert(key, key);
     }
 
@@ -121,13 +187,15 @@ class TreeBenchmark {
 
     while (sync_barrier_) embb::base::Thread::CurrentYield();
 
-    for (int i = 0; i < num_operations_; ++i) {
-      int key = rand() % tree_size_;
-      double op_rate = static_cast<double>(rand()) / RAND_MAX;
+    for (size_t i = 0; i < operations_per_thread_; ++i) {
+//      int key = rand() % static_cast<int>(tree_size_);
+      int key = key_dist(key_gen);
+//      double op_rate = static_cast<double>(rand()) / RAND_MAX;
+      double op_rate = op_dist(op_gen);
 
-      if (op_rate < insert_rate_) {
+      if (op_rate <= insert_rate_) {
         tree_->TryInsert(key, key);
-      } else if ((op_rate -= insert_rate_) < delete_rate_) {
+      } else if ((op_rate -= insert_rate_) <= delete_rate_) {
         tree_->TryDelete(key);
       } else {
         int value;
@@ -138,19 +206,21 @@ class TreeBenchmark {
     --active_threads_;
   }
 
-  TreeBenchmark(const TreeBenchmark&);
-  TreeBenchmark& operator=(const TreeBenchmark&);
+  unsigned int TreePopulation() {
+    unsigned int population = 0;
 
-  const int tree_size_;
-  const double insert_rate_;
-  const double delete_rate_;
-  const double prefill_level_;
+    for (size_t i = 0; i < tree_size_; ++i) {
+      int key = static_cast<int>(i);
+      int value;
+      if (tree_->Get(key, value)) {
+        ++population;
+      }
+    }
+
+    return population;
+  }
+
   Tree* tree_;
-  int num_threads_;
-  int num_operations_;
-  std::vector<embb::base::Thread*> runners_;
-  embb::base::Atomic<bool> sync_barrier_;
-  embb::base::Atomic<int> active_threads_;
 };
 
 } // namespace perf

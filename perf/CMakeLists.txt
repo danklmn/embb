@@ -11,5 +11,8 @@ include_directories("include"
 file(GLOB_RECURSE PERF_HEADERS "include/*.h")
 
 add_executable(tree_perf main.cc ${PERF_HEADERS})
+if (CMAKE_COMPILER_IS_GNUCXX)
+  target_compile_options(tree_perf PUBLIC -std=c++11)
+endif()
 target_link_libraries(tree_perf embb_containers_cpp embb_base_cpp
                                 embb_base_c ${compiler_libs})
