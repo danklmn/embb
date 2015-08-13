@@ -29,6 +29,7 @@
 #include <stdlib.h>
 
 #include <embb/base/c/internal/unused.h>
+#include <embb/base/internal/platform.h>
 #include <embb/perf/register.h>
 #include <embb/perf/benchmark.h>
 
@@ -47,6 +48,29 @@ void Usage(char* prog_name) {
       << " [-p<prefill_level>]" << " [-a]" << std::endl;
 }
 
+int SetCurrentThreadAffinity(unsigned int core) {
+#if defined EMBB_PLATFORM_THREADING_WINTHREADS
+  HANDLE self = GetCurrentThread();
+  DWORD_PTR cpuset = 1U << core;
+  if (SetThreadAffinityMask(self, cpuset) == 0) {
+    return 1;
+  }
+#elif defined EMBB_PLATFORM_HAS_GLIB_CPU
+  pthread_t thread = pthread_self();
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(core, &cpuset);
+  if (pthread_setaffinity_np(self, sizeof(cpu_set_t), &cpuset) != 0) {
+    return 1;
+  }
+#else
+  EMBB_UNUSED(core);
+  std::cerr << "WARNING: CPU affinities are not supported!\n";
+#endif
+
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
   bool run_latency_test = false;
   bool run_throughput_test = false;
@@ -59,7 +83,9 @@ int main(int argc, char* argv[]) {
   double insert_rate = 0.25;
   double delete_rate = 0.25;
   double prefill_level = 0.5;
-  bool offset_affinity = false;
+  unsigned int affinity_offset = 0;
+  unsigned int affinity_step = 1;
+  bool quiet = false;
 
   for (int i = 1; i < argc; ++i) {
     char opt = 0;
@@ -108,7 +134,16 @@ int main(int argc, char* argv[]) {
       prefill_level = atof(arg);
       break;
     case 'a':
-      offset_affinity = true;
+      if (arg[0] == 'o') {
+        affinity_offset = static_cast<unsigned int>(atoi(arg + 1));
+      } else if (arg[0] == 's') {
+        affinity_step = static_cast<unsigned int>(atoi(arg + 1));
+      } else {
+        affinity_step = static_cast<unsigned int>(atoi(arg));
+      }
+      break;
+    case 'q':
+      quiet = true;
       break;
     default:
       Usage(argv[0]);
@@ -120,31 +155,41 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  if (SetCurrentThreadAffinity(affinity_offset)) {
+    std::cerr << "ERROR: Failed to set current thread affinity!";
+    return 1;
+  }
 
   embb::perf::TreeBenchmark *benchmark = NULL;
   if (use_fgl_tree) {
     benchmark = new embb::perf::TreeBenchmarkImpl<FGLTree>(tree_size,
-        insert_rate, delete_rate, prefill_level, offset_affinity);
-    std::cout << "Tree type:             Fine-grained Locking\n";
+        insert_rate, delete_rate, prefill_level,
+        affinity_offset, affinity_step);
+    if (!quiet) std::cout << "Tree type:             Fine-grained Locking\n";
   } else if (use_cgl_tree) {
     benchmark = new embb::perf::TreeBenchmarkImpl<CGLTree>(tree_size,
-        insert_rate, delete_rate, prefill_level, offset_affinity);
-    std::cout << "Tree type:             Coarse-grained Locking\n";
+        insert_rate, delete_rate, prefill_level,
+        affinity_offset, affinity_step);
+    if (!quiet) std::cout << "Tree type:             Coarse-grained Locking\n";
   } else {
     benchmark = new embb::perf::TreeBenchmarkImpl<LockFreeTree>(tree_size,
-        insert_rate, delete_rate, prefill_level, offset_affinity);
-    std::cout << "Tree type:             Lock-free\n";
+        insert_rate, delete_rate, prefill_level,
+        affinity_offset, affinity_step);
+    if (!quiet) std::cout << "Tree type:             Lock-free\n";
   }
 
-  std::cout << "Number of threads:     " << num_threads << "\n";
-  std::cout << "Operations per thread: " << num_operations << "\n";
-  std::cout << "Affinity offset:       "
-      << (offset_affinity ? "yes" : "no") << "\n";
-  std::cout << "Insertion rate:        "
-      << static_cast<int>(insert_rate * 100) << "\n";
-  std::cout << "Deletion rate:         "
-      << static_cast<int>(delete_rate * 100) << "\n";
-  std::cout << std::flush;
+  if (!quiet) {
+    std::cout << "Number of threads:     " << num_threads << "\n";
+    std::cout << "Operations per thread: " << num_operations << "\n";
+    std::cout << "Affinity offset/step:  "
+        << affinity_offset << " / " << affinity_step << "\n";
+    std::cout << "Insert/delete rates:   "
+        << static_cast<int>(insert_rate * 100) << " / "
+        << static_cast<int>(delete_rate * 100) << "\n";
+    std::cout << "Tree size (prefilled): "
+        << tree_size << " (" << static_cast<int>(delete_rate * 100) << "%)\n";
+    std::cout << std::flush;
+  }
 
   unsigned int final_population = 0;
 
@@ -162,8 +207,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Throughput: " << throughput << " ops/sec\n";
   }
 
-  std::cout << "Final population: "
-      << static_cast<double>(final_population * 100) / tree_size << "%\n";
+  if (!quiet) {
+    std::cout << "Final population: "
+        << static_cast<double>(final_population * 100) / tree_size << "%\n";
+  }
 
   delete benchmark;
   

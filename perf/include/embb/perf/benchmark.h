@@ -43,14 +43,14 @@ namespace perf {
 
 class TreeBenchmark {
  public:
-  TreeBenchmark(unsigned int tree_size, double insert_rate = 0.25,
-                double delete_rate = 0.25, double prefill_level = 0.5,
-                bool offset_affinity = false)
+  TreeBenchmark(unsigned int tree_size, double insert_rate,
+                double delete_rate, double prefill_level,
+                unsigned int affinity_offset, unsigned int affinity_step)
       : tree_size_(tree_size), insert_rate_(insert_rate),
         delete_rate_(delete_rate), prefill_level_(prefill_level),
         operations_per_thread_(0), runners_(),
         sync_barrier_(false), active_threads_(0),
-        offset_affinity_(offset_affinity) {
+        affinity_offset_(affinity_offset), affinity_step_(affinity_step) {
     srand(static_cast<unsigned int>(time(NULL)));
   }
 
@@ -73,7 +73,8 @@ class TreeBenchmark {
 
     for (size_t i = 0; i < num_threads_; ++i) {
       embb::base::CoreSet core_set(false);
-      core_set.Add(i * (offset_affinity_ ? 2 : 1));
+      core_set.Add((affinity_offset_ + i * affinity_step_) %
+                   embb::base::CoreSet::CountAvailable());
       runners_.push_back(new embb::base::Thread(core_set,
           embb::base::MakeFunction(*this, &TreeBenchmark::GenerateLoad)));
     }
@@ -110,19 +111,19 @@ class TreeBenchmark {
   std::vector<embb::base::Thread*> runners_;
   embb::base::Atomic<bool> sync_barrier_;
   embb::base::Atomic<int> active_threads_;
-  bool offset_affinity_;
+  unsigned int affinity_offset_;
+  unsigned int affinity_step_;
 };
 
 template<typename Tree>
 class TreeBenchmarkImpl : public TreeBenchmark {
  public:
-  TreeBenchmarkImpl(unsigned int tree_size, double insert_rate = 0.25,
-                double delete_rate = 0.25, double prefill_level = 0.5,
-                bool offset_affinity = false)
+  TreeBenchmarkImpl(unsigned int tree_size, double insert_rate,
+                    double delete_rate, double prefill_level,
+                    unsigned int affinity_offset, unsigned int affinity_step)
       : TreeBenchmark(tree_size, insert_rate, delete_rate, prefill_level,
-                      offset_affinity),
+                      affinity_offset, affinity_step),
         tree_(NULL) {
-    srand(static_cast<unsigned int>(time(NULL)));
   }
 
   void RunLatencyTest(unsigned int threads, unsigned int operations,
@@ -178,7 +179,6 @@ class TreeBenchmarkImpl : public TreeBenchmark {
 
     size_t num_prefill = static_cast<size_t>(tree_size_ * prefill_level_);
     for (size_t i = 0; i < num_prefill / num_threads_; ++i) {
-//      int key = rand() % static_cast<int>(tree_size_);
       int key = key_dist(key_gen);
       tree_->TryInsert(key, key);
     }
@@ -188,9 +188,7 @@ class TreeBenchmarkImpl : public TreeBenchmark {
     while (sync_barrier_) embb::base::Thread::CurrentYield();
 
     for (size_t i = 0; i < operations_per_thread_; ++i) {
-//      int key = rand() % static_cast<int>(tree_size_);
       int key = key_dist(key_gen);
-//      double op_rate = static_cast<double>(rand()) / RAND_MAX;
       double op_rate = op_dist(op_gen);
 
       if (op_rate <= insert_rate_) {
