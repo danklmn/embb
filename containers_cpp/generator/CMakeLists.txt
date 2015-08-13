@@ -1,0 +1,1 @@
+add_executable(chromatic_tree_rebalancing_generator chromatic_tree_rebalancing_generator.cc)

@@ -16,9 +16,25 @@ include_directories(${EMBB_CONTAINERS_CPP_INCLUDE_DIRS}
                     ${CMAKE_CURRENT_BINARY_DIR}/../base_c/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/../base_cpp/include
                     ${CMAKE_CURRENT_BINARY_DIR}/../base_cpp/include
+                    ${CMAKE_CURRENT_BINARY_DIR}/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/../perf/include)
 
-add_library (embb_containers_cpp ${EMBB_CONTAINERS_CPP_SOURCES} ${EMBB_CONTAINERS_CPP_HEADERS})
+add_subdirectory(generator)
+set(GENERATOR_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/include/embb/containers/internal)
+
+file(MAKE_DIRECTORY ${GENERATOR_OUTPUT_DIR})
+add_custom_command (
+  OUTPUT ${GENERATOR_OUTPUT_DIR}/lock_free_chromatic_tree-rebalance.h
+  COMMAND chromatic_tree_rebalancing_generator
+              ${GENERATOR_OUTPUT_DIR}/lock_free_chromatic_tree-rebalance.h
+  DEPENDS chromatic_tree_rebalancing_generator
+)
+
+set(EMBB_CONTAINERS_CPP_GENERATED_HEADERS
+    ${GENERATOR_OUTPUT_DIR}/lock_free_chromatic_tree-rebalance.h)
+
+add_library (embb_containers_cpp ${EMBB_CONTAINERS_CPP_SOURCES} ${EMBB_CONTAINERS_CPP_HEADERS}
+             ${EMBB_CONTAINERS_CPP_GENERATED_HEADERS})
 target_link_libraries(embb_containers_cpp embb_base_cpp)
 
 if (BUILD_TESTS STREQUAL ON)
