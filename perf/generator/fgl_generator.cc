@@ -28,10 +28,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "rebalancing_operations.h"
+#include "../../containers_cpp/generator/rebalancing_operations.h"
 
 static const char INCLUDE_GUARD[] =
-    "EMBB_CONTAINERS_INTERNAL_LOCK_FREE_CHROMATIC_TREE_REBALANCE_H_";
+    "EMBB_CONTAINERS_INTERNAL_FGL_CHROMATIC_TREE_REBALANCE_H_";
 
 static const char GENERATOR_NOTICE[] =
     "//\n"
@@ -41,7 +41,7 @@ static const char GENERATOR_NOTICE[] =
 
 static const char RETURN_TYPE[]  = "embb_errors_t";
 static const char NODEARG_TYPE[] = "HazardNodePtr";
-static const char LOCKARG_TYPE[] = "HazardOperationPtr";
+static const char LOCKARG_TYPE[] = "UniqueLock";
 static const char NEWNODE_TYPE[] = "Node*";
 
 void PrintOperationSourceCode(FILE* file, const RebalancingOperation& op);
@@ -49,7 +49,7 @@ void PrintOperationSourceCode(FILE* file, const RebalancingOperation& op);
 int main(int argc, char* argv[]) {
   if (argc != 2) {
     fprintf(stderr, "USAGE:\n  %s <output_file>\n", argv[0]);
-    return 1;
+    return -1;
   }
 
   const char* filename = argv[1];
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
 #endif
   if (file == NULL) {
     fprintf(stderr, "Error: Cannot open file '%s' for writing!\n", filename);
-    return 1;
+    return -1;
   }
 
   // Printing header
@@ -90,10 +90,10 @@ void PrintOperationSourceCode(FILE* file, const RebalancingOperation& op) {
   fprintf(file, "%s %s(", RETURN_TYPE, op.name);
 
   // Method arguments
-  fprintf(file, "%s& u, %s& u_op", NODEARG_TYPE, LOCKARG_TYPE);
+  fprintf(file, "%s& u, %s& u_lock", NODEARG_TYPE, LOCKARG_TYPE);
   int offset = static_cast<int>(strlen(NODEARG_TYPE) + strlen(op.name) + 2);
   for (int i = 0; i < op.num_nodes; ++i) {
-    fprintf(file, ",\n%*s%s& %s, %s& %s_op", offset, "",
+    fprintf(file, ",\n%*s%s& %s, %s& %s_lock", offset, "",
             NODEARG_TYPE, op.old_nodes[i].name,
             LOCKARG_TYPE, op.old_nodes[i].name);
   }
@@ -112,7 +112,7 @@ void PrintOperationSourceCode(FILE* file, const RebalancingOperation& op) {
   for (int i = 0; i < op.num_nodes; ++i) {
     fprintf(file, "    %s = node_pool_.Allocate(\n"
                   "        %s->GetKey(), %s->GetValue(), %s,\n"
-                  "        %s, %s, Operation::INITIAL_DUMMY);\n"
+                  "        %s, %s);\n"
                   "    if (%s == NULL) break;\n",
             op.new_nodes[i].name,
             op.new_nodes[i].orig_node, op.new_nodes[i].orig_node,
@@ -121,40 +121,23 @@ void PrintOperationSourceCode(FILE* file, const RebalancingOperation& op) {
             op.new_nodes[i].name);
   }
 
-  fprintf(file, "\n"
-      "    HazardOperationPtr op(GetOperationGuard(HIDX_CURRENT_OP));\n"
-      "    op.ProtectSafe(operation_pool_.Allocate());\n"
-      "    if (op == NULL) break;\n");
-
-  // Create and fill the operation object
-  fprintf(file, "\n"
-                "    op->SetRoot(u, u_op);\n"
-                "    op->SetNewChild(nx);\n"
-                "    op->SetOldNodes(%s, %s_op",
-          op.old_nodes[0].name, op.old_nodes[0].name);
-  for (int i = 1; i < op.num_nodes; ++i) {
-    fprintf(file, ",\n                    %s, %s_op",
-            op.old_nodes[i].name, op.old_nodes[i].name);
+  // Mark nodes for retirement
+  fprintf(file, "\n");
+  for (int i = 0; i < op.num_nodes; ++i) {
+    fprintf(file, "    %s->Retire();\n", op.old_nodes[i].name);
   }
-  fprintf(file, ");\n");
 
   // Execute operation
   fprintf(file, "\n"
-      "    bool succeeded = op->Help(GetNodeGuard(HIDX_HELPING),\n"
-      "                              GetOperationGuard(HIDX_HELPING));\n"
-      "    op->CleanUp();\n"
-      "    \n"
-      "    if (!succeeded) {\n"
-      "      RetireOperation(op);\n"
-      "      result = EMBB_BUSY;\n"
-      "      break;\n"
-      "    }\n");
+      "    bool rotation_succeeded = u->ReplaceChild(ux, nx);\n"
+      "    assert(rotation_succeeded);\n"
+      "    if (!rotation_succeeded) return EMBB_BUSY;\n");
 
-  // Release original nodes and operations
+  // Release original nodes
   fprintf(file, "\n"
-      "    RetireOperation(u_op);\n");
+      "    (void)u_lock;\n");
   for (int i = 0; i < op.num_nodes; ++i) {
-    fprintf(file, "    RetireNode(%s); RetireOperation(%s_op);\n",
+    fprintf(file, "    RetireNode(%s, %s_lock);\n",
             op.old_nodes[i].name, op.old_nodes[i].name);
   }
   fprintf(file, "\n"

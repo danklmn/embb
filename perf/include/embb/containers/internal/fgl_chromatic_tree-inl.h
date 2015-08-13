@@ -50,7 +50,9 @@ FGLChromaticTreeNode(const Key& key, const Value& value, int weight,
                   Node* left, Node* right)
     : key_(key),
       value_(value),
-      weight_(weight),
+      weight_(weight < 0 ? -weight : weight),
+      is_leaf_(left == NULL),
+      is_sentinel_(weight < 0),
       left_(left),
       right_(right),
       retired_(false) {}
@@ -60,48 +62,60 @@ FGLChromaticTreeNode<Key, Value>::
 FGLChromaticTreeNode(const Key& key, const Value& value, int weight)
     : key_(key),
       value_(value),
-      weight_(weight),
+      weight_(weight < 0 ? -weight : weight),
+      is_leaf_(true),
+      is_sentinel_(weight < 0),
       left_(NULL),
       right_(NULL),
       retired_(false) {}
 
 template<typename Key, typename Value>
-const Key& FGLChromaticTreeNode<Key, Value>::GetKey() const {
+inline const Key& FGLChromaticTreeNode<Key, Value>::GetKey() const {
   return key_;
 }
 
 template<typename Key, typename Value>
-const Value& FGLChromaticTreeNode<Key, Value>::GetValue() const {
+inline const Value& FGLChromaticTreeNode<Key, Value>::GetValue() const {
   return value_;
 }
 
 template<typename Key, typename Value>
-int FGLChromaticTreeNode<Key, Value>::GetWeight() const {
+inline int FGLChromaticTreeNode<Key, Value>::GetWeight() const {
   return weight_;
 }
 
 template<typename Key, typename Value>
-typename FGLChromaticTreeNode<Key, Value>::AtomicNodePtr&
+inline typename FGLChromaticTreeNode<Key, Value>::AtomicNodePtr&
 FGLChromaticTreeNode<Key, Value>::GetLeft() {
   return left_;
 }
 
 template<typename Key, typename Value>
-typename FGLChromaticTreeNode<Key, Value>::Node*
+inline typename FGLChromaticTreeNode<Key, Value>::Node*
 FGLChromaticTreeNode<Key, Value>::GetLeft() const {
   return left_.Load();
 }
 
 template<typename Key, typename Value>
-typename FGLChromaticTreeNode<Key, Value>::AtomicNodePtr&
+inline typename FGLChromaticTreeNode<Key, Value>::AtomicNodePtr&
 FGLChromaticTreeNode<Key, Value>::GetRight() {
   return right_;
 }
 
 template<typename Key, typename Value>
-typename FGLChromaticTreeNode<Key, Value>::Node*
+inline typename FGLChromaticTreeNode<Key, Value>::Node*
 FGLChromaticTreeNode<Key, Value>::GetRight() const {
   return right_.Load();
+}
+
+template<typename Key, typename Value>
+inline bool FGLChromaticTreeNode<Key, Value>::IsLeaf() const {
+  return is_leaf_;
+}
+
+template<typename Key, typename Value>
+inline bool FGLChromaticTreeNode<Key, Value>::IsSentinel() const {
+  return is_sentinel_;
 }
 
 template<typename Key, typename Value>
@@ -119,17 +133,17 @@ ReplaceChild(Node* old_child, Node* new_child) {
 }
 
 template<typename Key, typename Value>
-void FGLChromaticTreeNode<Key, Value>::Retire() {
+inline void FGLChromaticTreeNode<Key, Value>::Retire() {
   retired_ = true;
 }
 
 template<typename Key, typename Value>
-bool FGLChromaticTreeNode<Key, Value>::IsRetired() const {
+inline bool FGLChromaticTreeNode<Key, Value>::IsRetired() const {
   return retired_;
 }
 
 template<typename Key, typename Value>
-embb::base::Mutex& FGLChromaticTreeNode<Key, Value>::GetMutex() {
+inline embb::base::Mutex& FGLChromaticTreeNode<Key, Value>::GetMutex() {
   return mutex_;
 }
 
@@ -157,9 +171,9 @@ FGLChromaticTree(size_t capacity, Key undefined_key, Value undefined_value,
       node_pool_(2 + 5 + 2 * capacity_ +
                  node_hazard_manager_.GetRetiredListMaxSize() *
                  embb::base::Thread::GetThreadsMaxCount()),
-      entry_(node_pool_.Allocate(undefined_key_, undefined_value_, 1,
+      entry_(node_pool_.Allocate(undefined_key_, undefined_value_, -1,
                                  node_pool_.Allocate(undefined_key_,
-                                                     undefined_value_, 1),
+                                                     undefined_value_, -1),
                                  static_cast<Node*>(NULL))) {
   assert(entry_ != NULL);
   assert(entry_->GetLeft() != NULL);
@@ -182,7 +196,7 @@ Get(const Key& key, Value& value) {
   HazardNodePtr leaf(GetNodeGuard(HIDX_LEAF));
   Search(key, leaf, parent, grandparent);
 
-  bool keys_are_equal = !IsSentinel(leaf) &&
+  bool keys_are_equal = !leaf->IsSentinel() &&
                         !(compare_(key, leaf->GetKey()) ||
                           compare_(leaf->GetKey(), key));
 
@@ -228,7 +242,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
     UniqueLock leaf_lock(leaf->GetMutex(), embb::base::try_lock);
     if (!leaf_lock.OwnsLock() || leaf->IsRetired()) continue;
 
-    bool keys_are_equal = !IsSentinel(leaf) &&
+    bool keys_are_equal = !leaf->IsSentinel() &&
                           !(compare_(key, leaf->GetKey()) ||
                             compare_(leaf->GetKey(), key));
     if (keys_are_equal) {
@@ -247,8 +261,11 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
       new_sibling = node_pool_.Allocate(leaf->GetKey(), leaf->GetValue(), 1);
       if (new_sibling == NULL) break;
 
-      int new_weight = (IsSentinel(parent)) ? 1 : (leaf->GetWeight() - 1);
-      if (IsSentinel(leaf) || compare_(key, leaf->GetKey())) {
+      int new_weight =
+          leaf->IsSentinel() ? -1 :
+            parent->IsSentinel() ? 1 :
+              (leaf->GetWeight() - 1);
+      if (leaf->IsSentinel() || compare_(key, leaf->GetKey())) {
         new_parent = node_pool_.Allocate(leaf->GetKey(), undefined_value_,
                                          new_weight, new_leaf, new_sibling);
       } else {
@@ -306,7 +323,7 @@ TryDelete(const Key& key, Value& old_value) {
     Search(key, leaf, parent, grandparent);
 
     // Reached leaf has a different key - nothing to delete
-    if (IsSentinel(leaf) || (compare_(key, leaf->GetKey()) ||
+    if (leaf->IsSentinel() || (compare_(key, leaf->GetKey()) ||
                              compare_(leaf->GetKey(), key))) {
       old_value = undefined_value_;
       deletion_succeeded = true;
@@ -342,8 +359,10 @@ TryDelete(const Key& key, Value& old_value) {
     UniqueLock leaf_lock(leaf->GetMutex(), embb::base::try_lock);
     if (!leaf_lock.OwnsLock() || leaf->IsRetired()) continue;
 
-    int new_weight = (IsSentinel(grandparent)) ?
-                  1 : (parent->GetWeight() + sibling->GetWeight());
+    int new_weight =
+          parent->IsSentinel() ? -1 :
+            grandparent->IsSentinel() ? 1 :
+              (parent->GetWeight() + sibling->GetWeight());
 
     new_leaf = node_pool_.Allocate(
         sibling->GetKey(), sibling->GetValue(), new_weight,
@@ -390,9 +409,9 @@ GetUndefinedValue() const {
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool FGLChromaticTree<Key, Value, Compare, ValuePool>::
+inline bool FGLChromaticTree<Key, Value, Compare, ValuePool>::
 IsEmpty() const {
-  return IsLeaf(entry_->GetLeft());
+  return entry_->GetLeft()->IsLeaf();
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
@@ -406,13 +425,13 @@ Search(const Key& key, HazardNodePtr& leaf, HazardNodePtr& parent,
     parent.ProtectSafe(entry_);
     leaf.ProtectSafe(entry_);
 
-    reached_leaf = IsLeaf(leaf);
+    reached_leaf = leaf->IsLeaf();
     while (!reached_leaf) {
       grandparent.AdoptHazard(parent);
       parent.AdoptHazard(leaf);
 
       AtomicNodePtr& next_leaf =
-          (IsSentinel(leaf) || compare_(key, leaf->GetKey())) ?
+          (leaf->IsSentinel() || compare_(key, leaf->GetKey())) ?
             leaf->GetLeft() : leaf->GetRight();
 
       while(!leaf.ProtectHazard(next_leaf));
@@ -424,25 +443,13 @@ Search(const Key& key, HazardNodePtr& leaf, HazardNodePtr& parent,
 
       VERIFY_ADDRESS(static_cast<Node*>(leaf));
 
-      reached_leaf = IsLeaf(leaf);
+      reached_leaf = leaf->IsLeaf();
     }
   }
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool FGLChromaticTree<Key, Value, Compare, ValuePool>::
-IsLeaf(const Node* node) const {
-  return node->GetLeft() == NULL;
-}
-
-template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool FGLChromaticTree<Key, Value, Compare, ValuePool>::
-IsSentinel(const Node* node) const {
-  return (node == entry_) || (node == entry_->GetLeft());
-}
-
-template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool FGLChromaticTree<Key, Value, Compare, ValuePool>::
+inline bool FGLChromaticTree<Key, Value, Compare, ValuePool>::
 HasChild(const Node* parent, const Node* child) const {
   return (parent->GetLeft() == child || parent->GetRight() == child);
 }
@@ -450,7 +457,7 @@ HasChild(const Node* parent, const Node* child) const {
 template<typename Key, typename Value, typename Compare, typename ValuePool>
 void FGLChromaticTree<Key, Value, Compare, ValuePool>::
 Destruct(Node* node) {
-  if (!IsLeaf(node)) {
+  if (!node->IsLeaf()) {
     Destruct(node->GetLeft());
     Destruct(node->GetRight());
   }
@@ -480,7 +487,7 @@ IsBalanced(const Node* node) const {
   // Overweight violation
   bool has_violation = node->GetWeight() > 1;
 
-  if (!has_violation && !IsLeaf(node)) {
+  if (!has_violation && !node->IsLeaf()) {
     const Node* left  = node->GetLeft();
     const Node* right = node->GetRight();
 
@@ -540,14 +547,14 @@ CleanUp(const Key& key) {
     parent.ProtectSafe(entry_);
     leaf.ProtectSafe(entry_);
 
-    reached_leaf = IsLeaf(leaf);
+    reached_leaf = leaf->IsLeaf();
     while (!reached_leaf && !found_violation) {
       grandgrandparent.AdoptHazard(grandparent);
       grandparent.AdoptHazard(parent);
       parent.AdoptHazard(leaf);
 
       AtomicNodePtr& next_leaf =
-          (IsSentinel(leaf) || compare_(key, leaf->GetKey())) ?
+          (leaf->IsSentinel() || compare_(key, leaf->GetKey())) ?
             leaf->GetLeft() : leaf->GetRight();
 
       // Parent is protected, so we can tolerate a changing child pointer
@@ -573,7 +580,7 @@ CleanUp(const Key& key) {
         break;
       }
 
-      reached_leaf = IsLeaf(leaf);
+      reached_leaf = leaf->IsLeaf();
     }
   }
 

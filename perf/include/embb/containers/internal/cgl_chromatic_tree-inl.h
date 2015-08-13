@@ -40,7 +40,9 @@ CGLChromaticTreeNode(const Key& key, const Value& value, int weight,
                   Node* left, Node* right)
     : key_(key),
       value_(value),
-      weight_(weight),
+      weight_(weight < 0 ? -weight : weight),
+      is_leaf_(left == NULL),
+      is_sentinel_(weight < 0),
       left_(left),
       right_(right) {}
 
@@ -49,27 +51,29 @@ CGLChromaticTreeNode<Key, Value>::
 CGLChromaticTreeNode(const Key& key, const Value& value, int weight)
     : key_(key),
       value_(value),
-      weight_(weight),
+      weight_(weight < 0 ? -weight : weight),
+      is_leaf_(true),
+      is_sentinel_(weight < 0),
       left_(NULL),
       right_(NULL) {}
 
 template<typename Key, typename Value>
-const Key& CGLChromaticTreeNode<Key, Value>::GetKey() const {
+inline const Key& CGLChromaticTreeNode<Key, Value>::GetKey() const {
   return key_;
 }
 
 template<typename Key, typename Value>
-const Value& CGLChromaticTreeNode<Key, Value>::GetValue() const {
+inline const Value& CGLChromaticTreeNode<Key, Value>::GetValue() const {
   return value_;
 }
 
 template<typename Key, typename Value>
-int CGLChromaticTreeNode<Key, Value>::GetWeight() const {
+inline int CGLChromaticTreeNode<Key, Value>::GetWeight() const {
   return weight_;
 }
 
 template<typename Key, typename Value>
-typename CGLChromaticTreeNode<Key, Value>::Node*
+inline typename CGLChromaticTreeNode<Key, Value>::Node*
 CGLChromaticTreeNode<Key, Value>::GetLeft() const {
   return left_;
 }
@@ -78,6 +82,16 @@ template<typename Key, typename Value>
 typename CGLChromaticTreeNode<Key, Value>::Node*
 CGLChromaticTreeNode<Key, Value>::GetRight() const {
   return right_;
+}
+
+template<typename Key, typename Value>
+inline bool CGLChromaticTreeNode<Key, Value>::IsLeaf() const {
+  return is_leaf_;
+}
+
+template<typename Key, typename Value>
+inline bool CGLChromaticTreeNode<Key, Value>::IsSentinel() const {
+  return is_sentinel_;
 }
 
 template<typename Key, typename Value>
@@ -102,9 +116,9 @@ CGLChromaticTree(size_t capacity, Key undefined_key, Value undefined_value,
       compare_(compare),
       capacity_(capacity),
       node_pool_(2 + 5 + 2 * capacity_),
-      entry_(node_pool_.Allocate(undefined_key_, undefined_value_, 1,
+      entry_(node_pool_.Allocate(undefined_key_, undefined_value_, -1,
                                  node_pool_.Allocate(undefined_key_,
-                                                     undefined_value_, 1),
+                                                     undefined_value_, -1),
                                  static_cast<Node*>(NULL))) {
   assert(entry_ != NULL);
   assert(entry_->GetLeft() != NULL);
@@ -130,7 +144,7 @@ Get(const Key& key, Value& value) {
   Node* leaf;
   Search(key, leaf, parent, grandparent);
 
-  bool keys_are_equal = !IsSentinel(leaf) &&
+  bool keys_are_equal = !leaf->IsSentinel() &&
                         !(compare_(key, leaf->GetKey()) ||
                           compare_(leaf->GetKey(), key));
 
@@ -169,7 +183,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
     Node* leaf;
     Search(key, leaf, parent, grandparent);
 
-    bool keys_are_equal = !IsSentinel(leaf) &&
+    bool keys_are_equal = !leaf->IsSentinel() &&
                           !(compare_(key, leaf->GetKey()) ||
                             compare_(leaf->GetKey(), key));
     if (keys_are_equal) {
@@ -188,8 +202,11 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
       new_sibling = node_pool_.Allocate(leaf->GetKey(), leaf->GetValue(), 1);
       if (new_sibling == NULL) break;
 
-      int new_weight = (IsSentinel(parent)) ? 1 : (leaf->GetWeight() - 1);
-      if (IsSentinel(leaf) || compare_(key, leaf->GetKey())) {
+      int new_weight =
+          leaf->IsSentinel() ? -1 :
+            parent->IsSentinel() ? 1 :
+              (leaf->GetWeight() - 1);
+      if (leaf->IsSentinel() || compare_(key, leaf->GetKey())) {
         new_parent = node_pool_.Allocate(leaf->GetKey(), undefined_value_,
                                          new_weight, new_leaf, new_sibling);
       } else {
@@ -247,7 +264,7 @@ TryDelete(const Key& key, Value& old_value) {
     Search(key, leaf, parent, grandparent);
 
     // Reached leaf has a different key - nothing to delete
-    if (IsSentinel(leaf) || (compare_(key, leaf->GetKey()) ||
+    if (leaf->IsSentinel() || (compare_(key, leaf->GetKey()) ||
                              compare_(leaf->GetKey(), key))) {
       old_value = undefined_value_;
       deletion_succeeded = true;
@@ -259,8 +276,10 @@ TryDelete(const Key& key, Value& old_value) {
     Node* sibling = ((parent->GetLeft() == leaf) ?
                       parent->GetRight() : parent->GetLeft());
 
-    int new_weight = (IsSentinel(grandparent)) ?
-                  1 : (parent->GetWeight() + sibling->GetWeight());
+    int new_weight =
+          parent->IsSentinel() ? -1 :
+            grandparent->IsSentinel() ? 1 :
+              (parent->GetWeight() + sibling->GetWeight());
 
     new_leaf = node_pool_.Allocate(
         sibling->GetKey(), sibling->GetValue(), new_weight,
@@ -302,9 +321,9 @@ GetUndefinedValue() const {
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool CGLChromaticTree<Key, Value, Compare, ValuePool>::
+inline bool CGLChromaticTree<Key, Value, Compare, ValuePool>::
 IsEmpty() const {
-  return IsLeaf(entry_->GetLeft());
+  return entry_->GetLeft()->IsLeaf();
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
@@ -314,28 +333,16 @@ Search(const Key& key, Node*& leaf, Node*& parent, Node*& grandparent) {
   parent      = entry_;
   leaf        = entry_->GetLeft();
 
-  while (!IsLeaf(leaf)) {
+  while (!leaf->IsLeaf()) {
     grandparent = parent;
     parent      = leaf;
-    leaf        = (IsSentinel(leaf) || compare_(key, leaf->GetKey())) ?
+    leaf        = (leaf->IsSentinel() || compare_(key, leaf->GetKey())) ?
                   leaf->GetLeft() : leaf->GetRight();
   }
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool CGLChromaticTree<Key, Value, Compare, ValuePool>::
-IsLeaf(const Node* node) const {
-  return node->GetLeft() == NULL;
-}
-
-template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool CGLChromaticTree<Key, Value, Compare, ValuePool>::
-IsSentinel(const Node* node) const {
-  return (node == entry_) || (node == entry_->GetLeft());
-}
-
-template<typename Key, typename Value, typename Compare, typename ValuePool>
-bool CGLChromaticTree<Key, Value, Compare, ValuePool>::
+inline bool CGLChromaticTree<Key, Value, Compare, ValuePool>::
 HasChild(const Node* parent, const Node* child) const {
   return (parent->GetLeft() == child || parent->GetRight() == child);
 }
@@ -343,7 +350,7 @@ HasChild(const Node* parent, const Node* child) const {
 template<typename Key, typename Value, typename Compare, typename ValuePool>
 void CGLChromaticTree<Key, Value, Compare, ValuePool>::
 Destruct(Node* node) {
-  if (!IsLeaf(node)) {
+  if (!node->IsLeaf()) {
     Destruct(node->GetLeft());
     Destruct(node->GetRight());
   }
@@ -373,7 +380,7 @@ IsBalanced(const Node* node) const {
   // Overweight violation
   bool has_violation = node->GetWeight() > 1;
 
-  if (!has_violation && !IsLeaf(node)) {
+  if (!has_violation && !node->IsLeaf()) {
     const Node* left  = node->GetLeft();
     const Node* right = node->GetRight();
 
@@ -415,12 +422,12 @@ CleanUp(const Key& key) {
     parent = entry_;
     leaf = entry_->GetLeft();
 
-    reached_leaf = IsLeaf(leaf);
+    reached_leaf = leaf->IsLeaf();
     while (!reached_leaf && !found_violation) {
       grandgrandparent = grandparent;
       grandparent = parent;
       parent = leaf;
-      leaf = (IsSentinel(leaf) || compare_(key, leaf->GetKey())) ?
+      leaf = (leaf->IsSentinel() || compare_(key, leaf->GetKey())) ?
             leaf->GetLeft() : leaf->GetRight();
 
       // Check for violations
@@ -436,7 +443,7 @@ CleanUp(const Key& key) {
         break;
       }
 
-      reached_leaf = IsLeaf(leaf);
+      reached_leaf = leaf->IsLeaf();
     }
   }
 

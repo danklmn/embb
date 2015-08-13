@@ -115,6 +115,20 @@ class CGLChromaticTreeNode {
   Node* GetRight() const;
 
   /**
+   * Checks if the node is a leaf.
+   *
+   * @return \c true if node is a leaf, \c false otherwise
+   */
+  bool IsLeaf() const;
+
+  /**
+   * Checks if the node is a sentinel.
+   *
+   * @return \c true if node is a sentinel, \c false otherwise
+   */
+  bool IsSentinel() const;
+
+  /**
    * Replaces one of the child pointers that compares equal to \c old_child
    * with the \c new_child.
    *
@@ -130,9 +144,11 @@ class CGLChromaticTreeNode {
   CGLChromaticTreeNode(const CGLChromaticTreeNode&);
   CGLChromaticTreeNode& operator=(const CGLChromaticTreeNode&);
 
-  const Key          key_;       /**< Stored key. */
-  const Value        value_;     /**< Stored value. */
-  const int          weight_;    /**< Weight of the node. */
+  const Key          key_;         /**< Stored key. */
+  const Value        value_;       /**< Stored value. */
+  const int          weight_;      /**< Weight of the node. */
+  const bool         is_leaf_;     /**< True if node is a leaf. */
+  const bool         is_sentinel_; /**< True if node is a sentinel. */
   Node*              left_;      /**< Pointer to left child node. */
   Node*              right_;     /**< Pointer to right child node. */
 };
@@ -315,24 +331,6 @@ class CGLChromaticTree {
    * \param[IN,OUT] grandparent Reference to the grandparent of the reached leaf
    */
   void Search(const Key& key, Node*& leaf, Node*& parent, Node*& grandparent);
-
-  /**
-   * Checks whether the given node is a leaf.
-   *
-   * \param[IN] node Node to be checked
-   *
-   * \return \c true if the given node is a leaf, \c false otherwise
-   */
-  bool IsLeaf(const Node* node) const;
-
-  /**
-   * Checks whether the given node is a sentinel node.
-   *
-   * \param[IN] node Node to be checked
-   *
-   * \return \c true if the given node is a sentinel node, \c false otherwise
-   */
-  bool IsSentinel(const Node* node) const;
 
   /**
    * Checks whether the given node has a specified child node.
