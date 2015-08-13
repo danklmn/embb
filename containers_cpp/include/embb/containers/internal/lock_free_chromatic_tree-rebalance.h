@@ -51,7 +51,7 @@ embb_errors_t BLK(HazardNodePtr& u, HazardOperationPtr& u_op,
         uxr->GetLeft(), uxr->GetRight(), Operation::INITIAL_DUMMY);
     if (nxr == NULL) break;
     nx = node_pool_.Allocate(
-        ux->GetKey(), ux->GetValue(), IsSentinel(u) ? 1 : ux->GetWeight() - 1,
+        ux->GetKey(), ux->GetValue(), u->IsSentinel() ? 1 : ux->GetWeight() - 1,
         nxl, nxr, Operation::INITIAL_DUMMY);
     if (nx == NULL) break;
 
@@ -111,7 +111,7 @@ embb_errors_t PUSH_L(HazardNodePtr& u, HazardOperationPtr& u_op,
         uxr->GetLeft(), uxr->GetRight(), Operation::INITIAL_DUMMY);
     if (nxr == NULL) break;
     nx = node_pool_.Allocate(
-        ux->GetKey(), ux->GetValue(), IsSentinel(u) ? 1 : ux->GetWeight() + 1,
+        ux->GetKey(), ux->GetValue(), u->IsSentinel() ? 1 : ux->GetWeight() + 1,
         nxl, nxr, Operation::INITIAL_DUMMY);
     if (nx == NULL) break;
 
@@ -171,7 +171,7 @@ embb_errors_t PUSH_R(HazardNodePtr& u, HazardOperationPtr& u_op,
         uxl->GetLeft(), uxl->GetRight(), Operation::INITIAL_DUMMY);
     if (nxl == NULL) break;
     nx = node_pool_.Allocate(
-        ux->GetKey(), ux->GetValue(), IsSentinel(u) ? 1 : ux->GetWeight() + 1,
+        ux->GetKey(), ux->GetValue(), u->IsSentinel() ? 1 : ux->GetWeight() + 1,
         nxl, nxr, Operation::INITIAL_DUMMY);
     if (nx == NULL) break;
 
@@ -1317,7 +1317,7 @@ embb_errors_t W7(HazardNodePtr& u, HazardOperationPtr& u_op,
         uxr->GetLeft(), uxr->GetRight(), Operation::INITIAL_DUMMY);
     if (nxr == NULL) break;
     nx = node_pool_.Allocate(
-        ux->GetKey(), ux->GetValue(), IsSentinel(u) ? 1 : ux->GetWeight() + 1,
+        ux->GetKey(), ux->GetValue(), u->IsSentinel() ? 1 : ux->GetWeight() + 1,
         nxl, nxr, Operation::INITIAL_DUMMY);
     if (nx == NULL) break;
 

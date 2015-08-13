@@ -425,13 +425,16 @@ const double embb::containers::internal::HazardPointer<GuardType>::
 template<typename Type>
 UniqueHazardPointer<Type>::
 UniqueHazardPointer()
-    : hazard_guard_(NULL), local_ptr_value_(NULL),
-      undefined_guard_(NULL), active_(false) {}
+    : hazard_guard_(NULL),
+      local_ptr_value_(NULL),
+      undefined_guard_(NULL),
+      active_(false) {}
 
 template<typename Type>
 UniqueHazardPointer<Type>::
 UniqueHazardPointer(AtomicTypePtr& hazard_guard, Type* undefined_guard)
-    : hazard_guard_(&hazard_guard), local_ptr_value_(hazard_guard_->Load()),
+    : hazard_guard_(&hazard_guard),
+      local_ptr_value_(hazard_guard_->Load()),
       undefined_guard_(undefined_guard),
       active_(LoadGuardedPointer() == undefined_guard_) {}
 
@@ -464,19 +467,19 @@ void UniqueHazardPointer<Type>::ProtectSafe(Type* safe_ptr) {
 }
 
 template<typename Type>
-UniqueHazardPointer<Type>::operator Type* () const {
+inline UniqueHazardPointer<Type>::operator Type* () const {
   assert(IsActive());
   return LoadGuardedPointer();
 }
 
 template<typename Type>
-Type* UniqueHazardPointer<Type>::operator->() const {
+inline Type* UniqueHazardPointer<Type>::operator->() const {
   assert(IsActive());
   return LoadGuardedPointer();
 }
 
 template<typename Type>
-Type& UniqueHazardPointer<Type>::operator*() const {
+inline Type& UniqueHazardPointer<Type>::operator*() const {
   assert(IsActive());
   return *(LoadGuardedPointer());
 }
@@ -506,27 +509,27 @@ Type* UniqueHazardPointer<Type>::ReleaseHazard() {
 }
 
 template<typename Type>
-bool UniqueHazardPointer<Type>::IsActive() const {
+inline bool UniqueHazardPointer<Type>::IsActive() const {
   return active_;
 }
 
 template<typename Type>
-void UniqueHazardPointer<Type>::SetActive(bool active) {
+inline void UniqueHazardPointer<Type>::SetActive(bool active) {
   active_ = active;
 }
 
 template<typename Type>
-void UniqueHazardPointer<Type>::ClearHazard() {
+inline void UniqueHazardPointer<Type>::ClearHazard() {
   StoreGuardedPointer(undefined_guard_);
 }
 
 template<typename Type>
-Type* UniqueHazardPointer<Type>::LoadGuardedPointer() const {
+inline Type* UniqueHazardPointer<Type>::LoadGuardedPointer() const {
   return local_ptr_value_;
 }
 
 template<typename Type>
-void UniqueHazardPointer<Type>::StoreGuardedPointer(Type* ptr) {
+inline void UniqueHazardPointer<Type>::StoreGuardedPointer(Type* ptr) {
   hazard_guard_->Store(ptr);
   local_ptr_value_ = ptr;
 }
