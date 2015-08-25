@@ -180,7 +180,8 @@ class TreeBenchmarkImpl : public TreeBenchmark {
     size_t num_prefill = static_cast<size_t>(tree_size_ * prefill_level_);
     for (size_t i = 0; i < num_prefill / num_threads_; ++i) {
       int key = key_dist(key_gen);
-      tree_->TryInsert(key, key);
+      bool success = tree_->TryInsert(key, key);
+      assert(success); (void)(success);
     }
 
     ++active_threads_;
@@ -192,9 +193,11 @@ class TreeBenchmarkImpl : public TreeBenchmark {
       double op_rate = op_dist(op_gen);
 
       if (op_rate <= insert_rate_) {
-        tree_->TryInsert(key, key);
+        bool success = tree_->TryInsert(key, key);
+        assert(success); (void)(success);
       } else if ((op_rate -= insert_rate_) <= delete_rate_) {
-        tree_->TryDelete(key);
+        bool success = tree_->TryDelete(key);
+        assert(success); (void)(success);
       } else {
         int value;
         tree_->Get(key, value);

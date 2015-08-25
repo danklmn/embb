@@ -1,5 +1,10 @@
 project (project_embb_tree_perf_test)
 
+# Execute the GroupSources macro
+include(${CMAKE_SOURCE_DIR}/CMakeCommon/GroupSourcesMSVC.cmake)
+GroupSourcesMSVC(include)
+GroupSourcesMSVC(test)
+
 include_directories("include"
                     ${CMAKE_CURRENT_BINARY_DIR}/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/../base_c/include

@@ -187,7 +187,7 @@ int main(int argc, char* argv[]) {
         << static_cast<int>(insert_rate * 100) << " / "
         << static_cast<int>(delete_rate * 100) << "\n";
     std::cout << "Tree size (prefilled): "
-        << tree_size << " (" << static_cast<int>(delete_rate * 100) << "%)\n";
+        << tree_size << " (" << static_cast<int>(prefill_level * 100) << "%)\n";
     std::cout << std::flush;
   }
 
