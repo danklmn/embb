@@ -335,6 +335,15 @@ Scan(HazardPointerThreadEntry_t* currentHazardPointerEntry) {
 }
 
 template< typename GuardType >
+size_t HazardPointer< GuardType >::
+GetTotalRetiredCapacity(int guards_per_thread) {
+  size_t max_threads = embb::base::Thread::GetThreadsMaxCount();
+  size_t local_retired_list_size =
+    static_cast<size_t>(RETIRE_THRESHOLD * max_threads * guards_per_thread) + 1;
+  return local_retired_list_size * max_threads;
+}
+
+template< typename GuardType >
 size_t HazardPointer< GuardType >::GetRetiredListMaxSize() const {
   return static_cast<size_t>(RETIRE_THRESHOLD *
         static_cast<double>(embb::base::Thread::GetThreadsMaxCount()) *
@@ -365,6 +374,15 @@ HazardPointer< GuardType >::HazardPointer(
 
 template< typename GuardType >
 HazardPointer< GuardType >::~HazardPointer() {
+  // Free everything left in all per-thread retired lists
+  for (size_t i = 0; i != hazard_pointers; ++i) {
+    FixedSizeList<GuardType>& retired = hazard_pointer_thread_entry_array[i].GetRetired();
+    EMBB_CONTAINERS_CPP_DEPENDANT_TYPENAME FixedSizeList< GuardType >::iterator it;
+    for (it = retired.begin(); it != retired.end(); ++it) {
+      this->free_guard_callback(*it);
+    }
+  }
+
   for (size_t i = 0; i != hazard_pointers; ++i) {
     hazard_pointer_thread_entry_array[i].~HazardPointerThreadEntry_t();
   }

@@ -520,37 +520,35 @@ template<typename Key, typename Value, typename Compare, typename ValuePool>
 ChromaticTree<Key, Value, Compare, ValuePool>::
 ChromaticTree(size_t capacity, Key undefined_key, Value undefined_value,
               Compare compare)
-#ifdef EMBB_PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable:4355)
-#endif
-    : node_hazard_manager_(
-          embb::base::Function<void, Node*>(*this, &ChromaticTree::FreeNode),
-          NULL, HIDX_MAX),
-      operation_hazard_manager_(
-          embb::base::Function<void, Operation*>(*this,
-                                                 &ChromaticTree::FreeOperation),
-          NULL, HIDX_MAX),
-#ifdef EMBB_PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
-      undefined_key_(undefined_key),
+    : undefined_key_(undefined_key),
       undefined_value_(undefined_value),
       compare_(compare),
       capacity_(capacity),
-      node_pool_(2 + 5 + 2 * capacity_ +
-                 node_hazard_manager_.GetRetiredListMaxSize() *
-                 embb::base::Thread::GetThreadsMaxCount()),
+      node_pool_(2 + 5 + 2 * capacity_ + 
+                 NodeHazardManager::GetTotalRetiredCapacity(HIDX_MAX)),
       operation_pool_(2 + 5 + 2 * capacity_ +
-                      operation_hazard_manager_.GetRetiredListMaxSize() *
-                      embb::base::Thread::GetThreadsMaxCount()),
+                      OperationHazardManager::GetTotalRetiredCapacity(HIDX_MAX)),
       entry_(node_pool_.Allocate(undefined_key_, undefined_value_, -1,
                                  node_pool_.Allocate(undefined_key_,
                                                      undefined_value_,
                                                      -1,
                                                      Operation::INITIAL_DUMMY),
                                  static_cast<Node*>(NULL),
-                                 Operation::INITIAL_DUMMY)) {
+                                 Operation::INITIAL_DUMMY)),
+#ifdef EMBB_PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable:4355)
+#endif
+      node_hazard_manager_(
+          embb::base::MakeFunction(*this, &ChromaticTree::FreeNode),
+          NULL, HIDX_MAX),
+      operation_hazard_manager_(
+          embb::base::MakeFunction(*this, &ChromaticTree::FreeOperation),
+          NULL, HIDX_MAX)
+#ifdef EMBB_PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
+{
   assert(entry_ != NULL);
   assert(entry_->GetLeft() != NULL);
 }
@@ -559,6 +557,10 @@ template<typename Key, typename Value, typename Compare, typename ValuePool>
 ChromaticTree<Key, Value, Compare, ValuePool>::
 ~ChromaticTree() {
   Destruct(entry_->GetLeft());
+  Operation* op = entry_->GetOperation();
+  if (op != Operation::INITIAL_DUMMY && op != Operation::RETIRED_DUMMY) {
+    FreeOperation(op);
+  }
   FreeNode(entry_);
 }
 
@@ -882,6 +884,10 @@ Destruct(Node* node) {
     Destruct(node->GetLeft());
     Destruct(node->GetRight());
   }
+  Operation* op = node->GetOperation();
+  if (op != Operation::INITIAL_DUMMY && op != Operation::RETIRED_DUMMY) {
+    FreeOperation(op);
+  }
   FreeNode(node);
 }
 
@@ -996,6 +1002,7 @@ template<typename Key, typename Value, typename Compare, typename ValuePool>
 void ChromaticTree<Key, Value, Compare, ValuePool>::
 FreeOperation(Operation* operation) {
 #ifdef EMBB_DEBUG
+  assert(operation != Operation::INITIAL_DUMMY && operation != Operation::RETIRED_DUMMY);
   operation->SetDeleted();
 #endif
   operation_pool_.Free(operation);

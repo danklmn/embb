@@ -661,6 +661,10 @@ class ChromaticTree {
   typedef ObjectPool<Node, ValuePool>               NodePool;
   /** Object pool for tree operations. */
   typedef ObjectPool<Operation, ValuePool>          OperationPool;
+  /** Hazard pointer manager for protecting node pointers. */
+  typedef internal::HazardPointer<Node*>               NodeHazardManager;
+  /** Hazard pointer manager for protecting operation pointers. */
+  typedef internal::HazardPointer<Operation*>          OperationHazardManager;
 
   /** Enumeration of used hazard pointer indexes. */
   typedef enum {
@@ -860,11 +864,6 @@ class ChromaticTree {
   // directly inside the class definition.
 # include <embb/containers/internal/lock_free_chromatic_tree-rebalance.h>
 
-  /** Hazard pointer manager for protecting node pointers. */
-  internal::HazardPointer<Node*> node_hazard_manager_;
-  /** Hazard pointer manager for protecting operation pointers. */
-  internal::HazardPointer<Operation*> operation_hazard_manager_;
-
   const Key     undefined_key_;   /**< A dummy key used by the tree. */
   const Value   undefined_value_; /**< A dummy value used by the tree. */
   const Compare compare_;         /**< Comparator object for the keys. */
@@ -873,6 +872,11 @@ class ChromaticTree {
   OperationPool operation_pool_;  /**< Pool of operation objects. */
   Node* const   entry_;           /**< Pointer to the sentinel node used as
                                    *   the entry point into the tree. */
+
+  /** Hazard pointer manager for protecting node pointers. */
+  NodeHazardManager      node_hazard_manager_;
+  /** Hazard pointer manager for protecting operation pointers. */
+  OperationHazardManager operation_hazard_manager_;
 
   /**
    * Friending the test class for white-box testing

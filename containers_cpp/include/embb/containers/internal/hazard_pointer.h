@@ -471,6 +471,8 @@ class HazardPointer  {
  public:
   typedef typename HazardPointerThreadEntry_t::AtomicGuard AtomicGuard;
 
+  static size_t GetTotalRetiredCapacity(int guards_per_thread);
+
   /**
    * Gets the capacity of one retired list
    *
