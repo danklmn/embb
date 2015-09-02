@@ -152,8 +152,8 @@ ChromaticTreeNode<Key, Value>::GetOperation() {
 
 
 template<typename Key, typename Value>
-ChromaticTreeOperation<Key, Value>::ChromaticTreeOperation()
-    : state_(STATE_FREEZING),
+ChromaticTreeOperation<Key, Value>::ChromaticTreeOperation(bool is_dummy)
+    : state_(is_dummy ? STATE_COMMITTED : STATE_FREEZING),
       root_(NULL),
       root_operation_(NULL),
       num_old_nodes_(0),
@@ -334,7 +334,7 @@ inline bool ChromaticTreeOperation<Key, Value>::IsCommitted() {
 }
 
 template<typename Key, typename Value>
-void ChromaticTreeOperation<Key, Value>::CleanUp() {
+void ChromaticTreeOperation<Key, Value>::CleanUp(Operation* retired_dummy) {
 #ifdef EMBB_DEBUG
   assert(!deleted_);
 #endif
@@ -343,7 +343,7 @@ void ChromaticTreeOperation<Key, Value>::CleanUp() {
   if (IsCommitted()) {
     for (size_t i = 0; i < num_old_nodes_; ++i) {
       assert(old_nodes_[i]->GetOperation() == this);
-      old_nodes_[i]->GetOperation() = RETIRED_DUMMY;
+      old_nodes_[i]->GetOperation() = retired_dummy;
     }
   }
 }
@@ -354,40 +354,6 @@ void ChromaticTreeOperation<Key, Value>::SetDeleted() {
   deleted_ = true;
 }
 #endif
-
-template<typename Key, typename Value>
-typename ChromaticTreeOperation<Key, Value>::Operation*
-ChromaticTreeOperation<Key, Value>::GetInitialDummmy() {
-#ifdef EMBB_PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable:4640)
-#endif
-  static ChromaticTreeOperation initial_dummy;
-#ifdef EMBB_PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
-
-  initial_dummy.state_ = STATE_COMMITTED;
-
-  return &initial_dummy;
-}
-
-template<typename Key, typename Value>
-typename ChromaticTreeOperation<Key, Value>::Operation*
-ChromaticTreeOperation<Key, Value>::GetRetiredDummmy() {
-#ifdef EMBB_PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable:4640)
-#endif
-  static ChromaticTreeOperation retired_dummy;
-#ifdef EMBB_PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
-
-  retired_dummy.state_ = STATE_COMMITTED;
-
-  return &retired_dummy;
-}
 
 template<typename Key, typename Value>
 bool ChromaticTreeOperation<Key, Value>::IsRollingBack() {
@@ -503,16 +469,6 @@ SwitchState(State old_state, State new_state) {
   return true;
 }
 
-template<typename Key, typename Value>
-typename ChromaticTreeOperation<Key, Value>::Operation* const
-    ChromaticTreeOperation<Key, Value>::INITIAL_DUMMY =
-        ChromaticTreeOperation::GetInitialDummmy();
-
-template<typename Key, typename Value>
-typename ChromaticTreeOperation<Key, Value>::Operation* const
-    ChromaticTreeOperation<Key, Value>::RETIRED_DUMMY =
-        ChromaticTreeOperation::GetRetiredDummmy();
-
 } // namespace internal
 
 
@@ -528,13 +484,15 @@ ChromaticTree(size_t capacity, Key undefined_key, Value undefined_value,
                  NodeHazardManager::GetTotalRetiredCapacity(HIDX_MAX)),
       operation_pool_(2 + 5 + 2 * capacity_ +
                       OperationHazardManager::GetTotalRetiredCapacity(HIDX_MAX)),
+      initial_operation_dummy_(true),
+      retired_operation_dummy_(true),
       entry_(node_pool_.Allocate(undefined_key_, undefined_value_, -1,
                                  node_pool_.Allocate(undefined_key_,
                                                      undefined_value_,
                                                      -1,
-                                                     Operation::INITIAL_DUMMY),
+                                                     &initial_operation_dummy_),
                                  static_cast<Node*>(NULL),
-                                 Operation::INITIAL_DUMMY)),
+                                 &initial_operation_dummy_)),
 #ifdef EMBB_PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable:4355)
@@ -558,7 +516,7 @@ ChromaticTree<Key, Value, Compare, ValuePool>::
 ~ChromaticTree() {
   Destruct(entry_->GetLeft());
   Operation* op = entry_->GetOperation();
-  if (op != Operation::INITIAL_DUMMY && op != Operation::RETIRED_DUMMY) {
+  if (!IsDummyOperation(op)) {
     FreeOperation(op);
   }
   FreeNode(entry_);
@@ -622,7 +580,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
       // Reached leaf has a matching key: replace it with a new copy
       old_value = leaf->GetValue();
       new_parent = node_pool_.Allocate(key, value, leaf->GetWeight(),
-                                       Operation::INITIAL_DUMMY);
+                                       &initial_operation_dummy_);
       if (new_parent == NULL) break;
 
     // Reached leaf has a different key: add a new leaf
@@ -630,10 +588,10 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
       old_value = undefined_value_;
 
       new_leaf = node_pool_.Allocate(key, value, 1,
-                                     Operation::INITIAL_DUMMY);
+                                     &initial_operation_dummy_);
       if (new_leaf == NULL) break;
       new_sibling = node_pool_.Allocate(leaf->GetKey(), leaf->GetValue(), 1,
-                                        Operation::INITIAL_DUMMY);
+                                        &initial_operation_dummy_);
       if (new_sibling == NULL) break;
 
       int new_weight =
@@ -643,11 +601,11 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
       if (leaf->IsSentinel() || compare_(key, leaf->GetKey())) {
         new_parent = node_pool_.Allocate(leaf->GetKey(), undefined_value_,
                                          new_weight, new_leaf, new_sibling,
-                                         Operation::INITIAL_DUMMY);
+                                         &initial_operation_dummy_);
       } else {
         new_parent = node_pool_.Allocate(key, undefined_value_,
                                          new_weight, new_sibling, new_leaf,
-                                         Operation::INITIAL_DUMMY);
+                                         &initial_operation_dummy_);
       }
       if (new_parent == NULL) break;
     }
@@ -663,7 +621,7 @@ TryInsert(const Key& key, const Value& value, Value& old_value) {
     // Execute operation
     insertion_succeeded = insert_op->Help(GetNodeGuard(HIDX_HELPING),
                                           GetOperationGuard(HIDX_HELPING));
-    insert_op->CleanUp();
+    insert_op->CleanUp(&retired_operation_dummy_);
 
     // If operation failed
     if (!insertion_succeeded) {
@@ -763,7 +721,7 @@ TryDelete(const Key& key, Value& old_value) {
 
     new_leaf = node_pool_.Allocate(
         sibling->GetKey(), sibling->GetValue(), new_weight,
-        sibling->GetLeft(), sibling->GetRight(), Operation::INITIAL_DUMMY);
+        sibling->GetLeft(), sibling->GetRight(), &initial_operation_dummy_);
     if (new_leaf == NULL) break;
 
     old_value = leaf->GetValue();
@@ -779,7 +737,7 @@ TryDelete(const Key& key, Value& old_value) {
     // Execute operation
     deletion_succeeded = delete_op->Help(GetNodeGuard(HIDX_HELPING),
                                          GetOperationGuard(HIDX_HELPING));
-    delete_op->CleanUp();
+    delete_op->CleanUp(&retired_operation_dummy_);
 
     // If operation failed
     if (!deletion_succeeded) {
@@ -884,8 +842,9 @@ Destruct(Node* node) {
     Destruct(node->GetLeft());
     Destruct(node->GetRight());
   }
+
   Operation* op = node->GetOperation();
-  if (op != Operation::INITIAL_DUMMY && op != Operation::RETIRED_DUMMY) {
+  if (!IsDummyOperation(op)) {
     FreeOperation(op);
   }
   FreeNode(node);
@@ -932,6 +891,13 @@ IsBalanced(const Node* node) const {
 }
 
 template<typename Key, typename Value, typename Compare, typename ValuePool>
+bool ChromaticTree<Key, Value, Compare, ValuePool>::
+IsDummyOperation(const Operation* operation) const {
+  return (operation == &initial_operation_dummy_ ||
+          operation == &retired_operation_dummy_);
+}
+
+template<typename Key, typename Value, typename Compare, typename ValuePool>
 void ChromaticTree<Key, Value, Compare, ValuePool>::
 RetireNode(HazardNodePtr& node) {
   node_hazard_manager_.EnqueuePointerForDeletion(node.ReleaseHazard());
@@ -942,7 +908,7 @@ void ChromaticTree<Key, Value, Compare, ValuePool>::
 RetireOperation(HazardOperationPtr& operation) {
   Operation* op = operation.ReleaseHazard();
   // Make sure we don't return the static dummy-operations to the pool
-  if (op != Operation::INITIAL_DUMMY && op != Operation::RETIRED_DUMMY) {
+  if (!IsDummyOperation(op)) {
     operation_hazard_manager_.EnqueuePointerForDeletion(op);
   }
 }
@@ -1002,7 +968,7 @@ template<typename Key, typename Value, typename Compare, typename ValuePool>
 void ChromaticTree<Key, Value, Compare, ValuePool>::
 FreeOperation(Operation* operation) {
 #ifdef EMBB_DEBUG
-  assert(operation != Operation::INITIAL_DUMMY && operation != Operation::RETIRED_DUMMY);
+  assert(!IsDummyOperation(operation));
   operation->SetDeleted();
 #endif
   operation_pool_.Free(operation);
