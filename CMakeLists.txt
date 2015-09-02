@@ -83,6 +83,7 @@ endif()
 option(BUILD_TESTS "Specify whether tests should be built" ON)
 option(BUILD_EXAMPLES "Specify whether examples should be built" OFF)
 option(USE_EXCEPTIONS "Specify whether exceptions should be activated in C++" ON)
+option(USE_LOCKED_ATOMICS "Specify whether to use locked replacements for atomic primitives in C++" OFF)
 option(INSTALL_DOCS "Specify whether Doxygen docs should be installed" ON)
 option(WARNINGS_ARE_ERRORS "Specify whether warnings should be treated as errors" OFF)
 option(USE_AUTOMATIC_INITIALIZATION "Specify whether the MTAPI C++ interface, algorithms and dataflow should automatically intialize the MTAPI node if no explicit initialization is present" ON)
@@ -195,6 +196,10 @@ else()
   message("-- Building examples disabled (default)")
 endif()
 message("   (set with command line option -DBUILD_EXAMPLES=ON/OFF)")
+
+if (USE_LOCKED_ATOMICS STREQUAL ON)
+  add_subdirectory(datools)
+endif()
 
 ## INSTALLATION
 #

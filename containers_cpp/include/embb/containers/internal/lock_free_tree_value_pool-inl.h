@@ -219,6 +219,15 @@ LockFreeTreeValuePool(ForwardIterator first, ForwardIterator last) {
   // Tree holds the counter of not allocated elements
   tree = treeAllocator.allocate(static_cast<size_t>(tree_size));
 
+#ifdef USE_LOCKED_ATOMICS
+  for (int i = 0; i < real_size; ++i) {
+    new (pool + i) embb::base::Atomic<Type>();
+  }
+  for (int i = 0; i < tree_size; ++i) {
+    new (tree + i) embb::base::Atomic<int>();
+  }
+#endif // USE_LOCKED_ATOMICS
+
   int i = 0;
 
   // Store the elements from the range
@@ -234,6 +243,14 @@ template<typename Type, Type Undefined, class PoolAllocator,
   class TreeAllocator >
 LockFreeTreeValuePool<Type, Undefined, PoolAllocator, TreeAllocator>::
 ~LockFreeTreeValuePool() {
+#ifdef USE_LOCKED_ATOMICS
+    for (int i = 0; i < real_size; ++i) {
+      pool[i].~Atomic();
+    }
+    for (int i = 0; i < tree_size; ++i) {
+      tree[i].~Atomic();
+    }
+#endif // USE_LOCKED_ATOMICS
   poolAllocator.deallocate(pool, static_cast<size_t>(real_size));
   treeAllocator.deallocate(tree, static_cast<size_t>(tree_size));
 }

@@ -90,6 +90,10 @@ inline bool AtomicInteger<BaseType>::IsInteger() const {
 
 template<typename BaseType>
 inline void AtomicInteger<BaseType>::operator&=(BaseType val) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(this->mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   NativeType native_operand;
   memcpy(&native_operand, &val, sizeof(val));
 
@@ -99,6 +103,10 @@ inline void AtomicInteger<BaseType>::operator&=(BaseType val) {
 
 template<typename BaseType>
 inline void AtomicInteger<BaseType>::operator|=(BaseType val) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(this->mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   NativeType native_operand;
   memcpy(&native_operand, &val, sizeof(val));
 
@@ -108,6 +116,10 @@ inline void AtomicInteger<BaseType>::operator|=(BaseType val) {
 
 template<typename BaseType>
 inline void AtomicInteger<BaseType>::operator^=(BaseType val) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(this->mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   NativeType native_operand;
   memcpy(&native_operand, &val, sizeof(val));
 

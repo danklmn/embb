@@ -36,6 +36,9 @@
 
 #include <embb/base/internal/atomic/atomic_utility.h>
 #include <embb/base/internal/atomic/atomic_implementation.h>
+#ifdef USE_LOCKED_ATOMICS
+#include <embb/base/mutex.h>
+#endif // USE_LOCKED_ATOMICS
 
 namespace embb {
 namespace base {
@@ -57,6 +60,10 @@ class AtomicBase {
     NativeType NativeType;
 
   mutable NativeType AtomicValue;
+
+#ifdef USE_LOCKED_ATOMICS
+  mutable Mutex mutex_;
+#endif // USE_LOCKED_ATOMICS
 
  public:
   /**
@@ -123,6 +130,10 @@ inline bool AtomicBase<BaseType>::IsPointer() const {
 
 template<typename BaseType>
 inline void AtomicBase<BaseType>::Store(BaseType val) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   NativeType storage_value;
   // Justification for using memcpy instead of pointer casts
   // or union type punning:
@@ -138,6 +149,10 @@ inline void AtomicBase<BaseType>::Store(BaseType val) {
 
 template<typename BaseType>
 inline BaseType AtomicBase<BaseType>::Load() const {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   BaseType return_value;
 
   NativeType storage_value =
@@ -150,6 +165,10 @@ inline BaseType AtomicBase<BaseType>::Load() const {
 
 template<typename BaseType>
 inline BaseType AtomicBase<BaseType>::Swap(BaseType val) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   NativeType storage_value;
   BaseType return_value;
 
@@ -166,6 +185,10 @@ inline BaseType AtomicBase<BaseType>::Swap(BaseType val) {
 template<typename BaseType>
 inline bool AtomicBase<BaseType>::
 CompareAndSwap(BaseType& expected, BaseType desired) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   NativeType native_expected;
   NativeType native_desired;
 

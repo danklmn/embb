@@ -102,6 +102,10 @@ IsArithmetic() const {
 template<typename BaseType, typename DifferenceType, size_t Stride>
 inline BaseType AtomicArithmetic<BaseType, DifferenceType, Stride>::
 FetchAndAdd(DifferenceType val) {
+#ifdef USE_LOCKED_ATOMICS
+  LockGuard<> guard(this->mutex_);
+#endif // USE_LOCKED_ATOMICS
+
   /*
   Despite the (at first sight) complexity of different function variables
   and memcpy calls, the compiler is smart enough to optimize this...

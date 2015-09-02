@@ -69,6 +69,12 @@ WaitFreeArrayValuePool(ForwardIterator first, ForwardIterator last) {
   // Use the allocator to allocate an array of size dist
   pool = allocator.allocate(dist);
 
+#ifdef USE_LOCKED_ATOMICS
+  for (int i = 0; i < size; ++i) {
+    new (pool + i) embb::base::Atomic<Type>();
+  }
+#endif // USE_LOCKED_ATOMICS
+
   int i = 0;
 
   // Store the elements of the range
@@ -79,6 +85,11 @@ WaitFreeArrayValuePool(ForwardIterator first, ForwardIterator last) {
 
 template<typename Type, Type Undefined, class Allocator >
 WaitFreeArrayValuePool<Type, Undefined, Allocator>::~WaitFreeArrayValuePool() {
+#ifdef USE_LOCKED_ATOMICS
+  for (int i = 0; i < size; ++i) {
+    pool[i].~Atomic();
+  }
+#endif // USE_LOCKED_ATOMICS
   allocator.deallocate(pool, (size_t)size);
 }
 } // namespace containers
