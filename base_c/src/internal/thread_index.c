@@ -130,4 +130,5 @@ void embb_internal_thread_index_set_max(unsigned int max) {
 
 void embb_internal_thread_index_reset() {
   embb_counter_init(embb_thread_index_counter());
+  embb_internal_thread_index_var = UINT_MAX;
 }
